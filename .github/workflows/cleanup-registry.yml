@@ -14,7 +14,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Delete old sha-tagged images
-              uses: snok/container-retention-policy@v3.0.0
+              uses: snok/container-retention-policy@v3.0.1
               with:
                   account: user
                   image-names: plex-releases-summary
@@ -25,7 +25,7 @@ jobs:
                   token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Delete untagged images
-              uses: snok/container-retention-policy@v3.0.0
+              uses: snok/container-retention-policy@v3.0.1
               with:
                   account: user
                   image-names: plex-releases-summary
