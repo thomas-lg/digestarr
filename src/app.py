@@ -10,7 +10,13 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from config import DEFAULT_CONFIG_PATH, Config, get_bootstrap_log_level, load_config
+from config import (
+    DEFAULT_CONFIG_PATH,
+    Config,
+    get_bootstrap_log_level,
+    load_config,
+    sync_missing_config_keys,
+)
 from discord_client import DiscordMediaItem, DiscordNotifier
 from health_server import record_run_completed, start_health_server
 from logging_config import setup_logging
@@ -449,6 +455,13 @@ def main() -> int:
   ─────────────────────────────────
 """)
     logger.info("Starting Plex Releases Summary %s", version_display)
+
+    # An install predating a release keeps a config.yml without the newer keys, which
+    # would make those settings silently unreachable. Reconcile before loading.
+    try:
+        sync_missing_config_keys(config_path)
+    except Exception as e:  # pragma: no cover - defensive: must never block startup
+        logger.warning("Could not reconcile config with the bundled template: %s", e)
 
     try:
         config = load_config(config_path)
