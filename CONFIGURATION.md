@@ -120,6 +120,35 @@ The image's `HEALTHCHECK` runs `scripts/healthcheck.py`, which probes the HTTP e
 when it is enabled and otherwise falls back to a process check — so the default
 (disabled) configuration still reports health correctly.
 
+#### External monitoring (Uptime Kuma, Gatus, ...)
+
+The default loopback bind is **not reachable** from an external monitor — not from the
+host, and not from another container, even on the same Docker network. Publishing the
+port alone does not help: the server is bound inside the container's own loopback.
+
+To expose it, set both:
+
+```yaml
+environment:
+  - ENABLE_HEALTHCHECK=true
+  - HEALTH_HOST=0.0.0.0
+```
+
+then reach it one of two ways:
+
+- **monitor outside Docker** — publish the port (`ports: ["8080:8080"]`) and point the
+  monitor at `http://<docker-host>:8080/health`
+- **monitor in a container on the same network** — no port mapping needed; point it at
+  `http://plex-releases-summary:8080/health`
+
+Configure it as a plain HTTP(s) monitor expecting `200`. The container's own
+`HEALTHCHECK` keeps working in this mode: the probe script rewrites a `0.0.0.0` bind to
+`127.0.0.1` for its own local request.
+
+Remember the endpoint is **unauthenticated**. It discloses only a status string and the
+last run timestamp, but anyone who can reach the address can read it, so prefer the
+same-network option over publishing the port to your LAN.
+
 ---
 
 ## Configuration Methods

@@ -16,6 +16,29 @@ services:
       - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
 
     # -------------------------------------------------------------------------
+    # HEALTH ENDPOINT (optional)
+    # -------------------------------------------------------------------------
+    # The container's own HEALTHCHECK needs nothing here: it probes the endpoint
+    # from inside, and health_host defaults to 127.0.0.1 so nothing is exposed.
+    #
+    # To let an EXTERNAL monitor (Uptime Kuma, Gatus, ...) reach it, the endpoint
+    # must bind all interfaces — set ENABLE_HEALTHCHECK=true and HEALTH_HOST=0.0.0.0
+    # in the environment block above, then either:
+    #
+    #   a) publish the port to the host, and point the monitor at <host>:8080/health
+    #
+    # ports:
+    #   - "8080:8080"
+    #
+    #   b) or, if the monitor runs as a container on the same Docker network, skip
+    #      the port mapping and point it at http://plex-releases-summary:8080/health
+    #
+    # The endpoint is UNAUTHENTICATED. It exposes only a status string and the last
+    # run timestamp — no config, URLs or credentials — but anyone who can reach the
+    # address can read it.
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
     # NETWORKING
     # -------------------------------------------------------------------------
     # This container must reach the Tautulli service by hostname.
