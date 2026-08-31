@@ -25,6 +25,9 @@ class ConfigInput(TypedDict, total=False):
     log_level: str
     initial_batch_size: int | None
     excluded_media_types: list[str]
+    enable_healthcheck: bool
+    health_host: str
+    health_port: int
 
 
 logger = logging.getLogger(__name__)
@@ -287,6 +290,15 @@ class Config(BaseModel):
             if candidate not in normalised:
                 normalised.append(candidate)
         return normalised
+
+    # Health Endpoint (Optional, scheduled mode only)
+    enable_healthcheck: bool = Field(False, description="Serve GET /health for container liveness probes")
+    health_host: str = Field(
+        "127.0.0.1",
+        min_length=1,
+        description="Interface the health endpoint binds to; loopback keeps it unreachable from the network",
+    )
+    health_port: int = Field(8080, description="Port for the health endpoint", ge=1, le=65535)
 
     @field_validator("log_level")
     @classmethod

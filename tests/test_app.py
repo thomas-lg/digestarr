@@ -1096,3 +1096,72 @@ class TestRunSummaryExcludesMediaTypes:
         assert sent["total_count"] == 1
         assert "✅ Run complete: 1 items" in caplog.text
         assert "Song" not in caplog.text
+
+
+class TestHealthServerStartup:
+    """Tests for wiring the health endpoint into main()."""
+
+    def _config(self, **overrides):
+        base = {
+            "tautulli_url": "http://tautulli:8181",
+            "tautulli_api_key": "secret",
+            "run_once": False,
+            "cron_schedule": "0 16 * * SUN",
+        }
+        base.update(overrides)
+        return Config.model_validate(base)
+
+    @pytest.mark.unit
+    def test_not_started_when_disabled(self, monkeypatch):
+        """Default configuration must open no socket at all."""
+        calls: list[tuple[str, int]] = []
+        monkeypatch.setattr("src.app.load_config", lambda path: self._config())
+        monkeypatch.setattr("src.app.start_health_server", lambda host, port: calls.append((host, port)))
+        monkeypatch.setattr("src.app.run_scheduled", lambda task, cron: 0)
+
+        assert main() == 0
+        assert calls == []
+
+    @pytest.mark.unit
+    def test_started_in_scheduled_mode_when_enabled(self, monkeypatch):
+        """Enabling it starts the server with the configured host and port."""
+        calls: list[tuple[str, int]] = []
+        monkeypatch.setattr(
+            "src.app.load_config",
+            lambda path: self._config(enable_healthcheck=True, health_host="127.0.0.1", health_port=9999),
+        )
+        monkeypatch.setattr("src.app.start_health_server", lambda host, port: calls.append((host, port)))
+        monkeypatch.setattr("src.app.run_scheduled", lambda task, cron: 0)
+
+        assert main() == 0
+        assert calls == [("127.0.0.1", 9999)]
+
+    @pytest.mark.unit
+    def test_not_started_in_run_once_mode(self, monkeypatch):
+        """One-shot mode exits immediately, so a health server would be pointless."""
+        calls: list[tuple[str, int]] = []
+        monkeypatch.setattr(
+            "src.app.load_config",
+            lambda path: self._config(run_once=True, enable_healthcheck=True),
+        )
+        monkeypatch.setattr("src.app.start_health_server", lambda host, port: calls.append((host, port)))
+        monkeypatch.setattr("src.app.run_summary", lambda config: 0)
+
+        assert main() == 0
+        assert calls == []
+
+    @pytest.mark.unit
+    def test_bind_failure_is_fatal(self, monkeypatch, capsys):
+        """An unusable port must fail loudly rather than run without the promised probe."""
+
+        def _boom(host, port):
+            raise OSError("address already in use")
+
+        monkeypatch.setattr("src.app.load_config", lambda path: self._config(enable_healthcheck=True))
+        monkeypatch.setattr("src.app.start_health_server", _boom)
+        monkeypatch.setattr("src.app.run_scheduled", lambda task, cron: 0)
+
+        assert main() == 1
+        # main() reconfigures logging handlers, so the record is asserted on the
+        # stream rather than via caplog.
+        assert "Could not start health endpoint" in capsys.readouterr().out
