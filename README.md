@@ -64,6 +64,8 @@ A lightweight Docker container that fetches recently added media from your Plex 
 - 🎯 Configurable time range (e.g., last 7 days)
 - 💬 **Optional Discord notifications** with rich embed formatting (including friendly "nothing new" updates)
 - 🐳 Docker-ready with minimal footprint
+- 🎛️ **Media type filtering** — exclude types you don't care about (e.g. the music library)
+- 🩺 **Optional HTTP health endpoint** for container liveness probes and external monitors
 - 📊 Clean, formatted output with media type detection
 - ⚡ Graceful shutdown handling for containerized environments
 
@@ -160,6 +162,8 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 | `discord_webhook_url`  | No       | None           | Discord webhook (optional)  |
 | `run_once`             | No       | `false`        | One-shot mode               |
 | `log_level`            | No       | `INFO`         | Logging level               |
+| `excluded_media_types` | No       | `[]`           | Media types to omit         |
+| `enable_healthcheck`   | No       | `false`        | Serve `GET /health`         |
 | Other fields           | No       | See docs       | See full reference          |
 
 > **📖 For complete configuration documentation**, including configuration methods, Docker secrets, all fields, troubleshooting, and examples, see **[CONFIGURATION.md](CONFIGURATION.md)**
@@ -266,6 +270,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   ├── app.py # Main application logic
 │   ├── config.py # Configuration loader and validator
 │   ├── discord_client.py # Discord webhook client
+│   ├── health_server.py # HTTP health endpoint
 │   ├── logging_config.py # Logging configuration
 │   ├── scheduler.py # APScheduler daemon mode
 │   └── tautulli_client.py # Tautulli API client
@@ -274,6 +279,8 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   ├── test_config.py # Configuration tests
 │   ├── test_discord_client.py # Discord tests
 │   ├── test_discord_markdown.py # Markdown escaping tests
+│   ├── test_health_server.py # Health endpoint tests
+│   ├── test_healthcheck_script.py # HEALTHCHECK probe tests
 │   ├── test_integration.py # Integration tests
 │   ├── test_logging_config.py # Logging config tests
 │   ├── test_scheduler.py # Scheduler tests
@@ -283,6 +290,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   ├── compile-deps.sh # Regenerate lockfiles from requirements files
 │   ├── dev-container-shell.sh # Enter dev container shell
 │   ├── format.sh # Format Python code
+│   ├── healthcheck.py # Docker HEALTHCHECK probe
 │   ├── README.md # Scripts documentation
 │   ├── start.sh # Start the app locally
 │   ├── test.sh # Run tests
@@ -340,12 +348,32 @@ See [docker-compose.yml](docker-compose.yml) for minimal production setup or [CO
 
 ### Health Monitoring
 
-Monitor using exit codes or process checks:
+The image ships a `HEALTHCHECK`, so `docker ps` reports real status out of the box. By
+default it checks that the process is alive; enabling the HTTP endpoint upgrades it to
+a genuine liveness probe, which also catches a scheduler that is running but no longer
+firing:
 
-```dockerfile
-# Process monitoring
-HEALTHCHECK CMD pgrep -f "python.*app.py" || exit 1
+```yaml
+environment:
+  - ENABLE_HEALTHCHECK=true
+```
 
+```bash
+docker exec <container> curl -s http://127.0.0.1:8080/health
+# {"status": "ok", "last_run": "2026-08-31T16:00:03+00:00"}
+```
+
+`last_run` is `null` until the first run completes.
+
+To let an **external monitor** (Uptime Kuma, Gatus, ...) poll it, also set
+`HEALTH_HOST=0.0.0.0` — binding loopback only is the default and is not reachable from
+outside the container, even with a published port. See
+[Health endpoint](CONFIGURATION.md#health-endpoint) for both wiring options and the
+security notes; the endpoint is unauthenticated.
+
+Without the endpoint you can still monitor by exit code or log content:
+
+```bash
 # One-shot mode - check exit code
 docker run --rm plex-releases-summary; [ $? -eq 0 ] || alert
 
@@ -353,7 +381,7 @@ docker run --rm plex-releases-summary; [ $? -eq 0 ] || alert
 docker logs container --since 24h | grep -q "✅ Run complete"
 ```
 
-External tools: Uptime Kuma, Prometheus/Grafana, Healthchecks.io. See [Exit Codes](CONFIGURATION.md#exit-codes) for monitoring integration.
+See [Exit Codes](CONFIGURATION.md#exit-codes) for monitoring integration.
 
 ## Troubleshooting
 

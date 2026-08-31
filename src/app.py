@@ -12,6 +12,7 @@ import requests
 
 from config import DEFAULT_CONFIG_PATH, Config, get_bootstrap_log_level, load_config
 from discord_client import DiscordMediaItem, DiscordNotifier
+from health_server import record_run_completed, start_health_server
 from logging_config import setup_logging
 from scheduler import run_scheduled
 from tautulli_client import (
@@ -410,6 +411,7 @@ def run_summary(config: Config) -> int:
         exit_code = 0
 
     logger.info("✅ Run complete: %d items in the last %d days", len(items), config.days_back)
+    record_run_completed()
     return exit_code
 
 
@@ -464,6 +466,14 @@ def main() -> int:
     else:
         # Scheduled mode: run as daemon with CRON schedule
         logger.info("📅 Starting in SCHEDULED mode")
+        # Scheduled mode only: in one-shot mode the process exits before a probe
+        # could ever reach it.
+        if config.enable_healthcheck:
+            try:
+                start_health_server(config.health_host, config.health_port)
+            except OSError as e:
+                logger.error("Could not start health endpoint on %s:%d: %s", config.health_host, config.health_port, e)
+                return 1
         # Guaranteed non-None by Pydantic model validator (validate_cron_schedule_required)
         if config.cron_schedule is None:  # pragma: no cover
             raise RuntimeError("cron_schedule must not be None when run_once is False")

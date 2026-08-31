@@ -70,6 +70,9 @@ All fields are defined in `src/config.py`.
 | `log_level`            | string  | No               | `"INFO"`                | DEBUG, INFO, WARNING, ERROR, CRITICAL | Logging verbosity                                                  |
 | `initial_batch_size`   | integer | No               | Adaptive\*\*            | 1-10000                               | Tautulli API batch size override                                   |
 | `excluded_media_types` | list    | No               | `[]`                    | movie, show, season, episode, album, track | Media types omitted from the summary                          |
+| `enable_healthcheck`   | boolean | No               | `false`                 | -                                     | Serve `GET /health` (scheduled mode only)                          |
+| `health_host`          | string  | No               | `"127.0.0.1"`           | non-empty                             | Interface the health endpoint binds to                             |
+| `health_port`          | integer | No               | `8080`                  | 1-65535                               | Port for the health endpoint                                       |
 
 \* `cron_schedule` is required when `run_once` is `false`.
 
@@ -95,6 +98,69 @@ also accepted comma-separated, which is the usual form for container deployments
 ```bash
 EXCLUDED_MEDIA_TYPES=track,album
 ```
+
+### Health endpoint
+
+With `enable_healthcheck: true`, the app serves `GET /health` on a daemon thread and
+answers `200` with `{"status": "ok", "last_run": "<iso-timestamp-or-null>"}`. Any other
+path returns `404`. `last_run` is the last run that finished building a summary — it is
+updated even if notification delivery failed, since it reports scheduler liveness
+rather than delivery success.
+
+**It only runs in scheduled mode.** In `run_once` mode the process exits immediately,
+so no probe could reach it; the setting is ignored there.
+
+**Network exposure.** `health_host` defaults to `127.0.0.1`, which is reachable only
+from inside the container — all the Docker `HEALTHCHECK` needs. Nothing on your network
+can reach it, and no port is published. Setting `health_host: 0.0.0.0` and publishing
+the port exposes an **unauthenticated** endpoint; only do that if you want an external
+monitor to probe it. The response contains no configuration, URLs or credentials.
+
+The image's `HEALTHCHECK` runs `scripts/healthcheck.py`, which probes the HTTP endpoint
+when it is enabled and otherwise falls back to a process check — so the default
+(disabled) configuration still reports health correctly.
+
+#### External monitoring (Uptime Kuma, Gatus, ...)
+
+The default loopback bind is **not reachable** from an external monitor — not from the
+host, and not from another container, even on the same Docker network. Publishing the
+port alone does not help: the server is bound inside the container's own loopback.
+
+To expose it, set both:
+
+```yaml
+environment:
+  - ENABLE_HEALTHCHECK=true
+  - HEALTH_HOST=0.0.0.0
+```
+
+then reach it one of two ways:
+
+- **monitor outside Docker** — publish the port (`ports: ["8080:8080"]`) and point the
+  monitor at `http://<docker-host>:8080/health`
+- **monitor in a container on the same network (recommended)** — no port mapping
+  needed; point it at `http://plex-releases-summary:8080/health`. If the monitor lives
+  in a different Compose project, attach this container to the monitor's network the
+  same way as for Tautulli:
+
+  ```yaml
+  networks:
+    - <monitor_project>_default
+
+  networks:
+    <monitor_project>_default:
+      external: true
+  ```
+
+  A container can join several networks, so this coexists with Tautulli's.
+
+Configure it as a plain HTTP(s) monitor expecting `200`. The container's own
+`HEALTHCHECK` keeps working in this mode: the probe script rewrites a `0.0.0.0` bind to
+`127.0.0.1` for its own local request.
+
+Remember the endpoint is **unauthenticated**. It discloses only a status string and the
+last run timestamp, but anyone who can reach the address can read it, so prefer the
+same-network option over publishing the port to your LAN.
 
 ---
 
@@ -169,6 +235,9 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
 | `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
+| `ENABLE_HEALTHCHECK`  | `enable_healthcheck`  | Enable the health endpoint   |
+| `HEALTH_HOST`         | `health_host`         | Health endpoint bind address |
+| `HEALTH_PORT`         | `health_port`         | Health endpoint port         |
 | `TZ`                  | N/A                   | Container timezone           |
 | `PUID`                | N/A                   | User ID (file permissions)   |
 | `PGID`                | N/A                   | Group ID (file permissions)  |

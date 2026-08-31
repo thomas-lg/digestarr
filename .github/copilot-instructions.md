@@ -25,6 +25,7 @@ src/
   tautulli_client.py   # Fetches recently added media from Tautulli
   discord_client.py    # Builds and sends Discord embeds
   scheduler.py         # APScheduler wrapper
+  health_server.py     # Optional GET /health endpoint (scheduled mode only)
   logging_config.py    # Logging setup
 tests/
   test_*.py            # Unit tests (pytest markers: unit, integration)
