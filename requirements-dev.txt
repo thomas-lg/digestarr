@@ -1,8 +1,9 @@
--r requirements.txt
-# Development dependencies
+# Development dependencies.
+# Runtime deps are NOT listed here: they live in pyproject.toml and are pulled in
+# by compile-deps.sh, which passes pyproject.toml alongside this file to pip-compile.
 
 # Build tools
-setuptools-scm>=8
+setuptools-scm>=10.0.5
 pip-tools>=7.6.1
 
 # Static analysis and code quality

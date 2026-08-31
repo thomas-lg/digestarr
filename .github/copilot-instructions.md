@@ -59,9 +59,10 @@ feature/* ──► develop ──► release/* ──► main
 
 ## Dependency / Lockfile Management
 
-- Runtime deps: `requirements.txt` → compiled to `requirements.lock`
-- Dev deps: `requirements-dev.txt` → compiled to `requirements-dev.lock`
-- After changing either `.txt` file, regenerate and commit the lockfiles:
+- Runtime deps: declared in `pyproject.toml` (`[project].dependencies`) → compiled to `requirements.lock`
+- Dev deps: `requirements-dev.txt` (dev tooling only) → compiled with `pyproject.toml` to `requirements-dev.lock`
+- `pyproject.toml` is the single source of truth for runtime constraints — never duplicate them in a requirements file
+- After changing `pyproject.toml` or `requirements-dev.txt`, regenerate and commit the lockfiles:
   ```bash
   ./scripts/compile-deps.sh
   ```
