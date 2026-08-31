@@ -792,6 +792,11 @@ enable_healthcheck: ${ENABLE_HEALTHCHECK}
 
 # Media types to exclude entirely
 excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
+
+# A key whose value is a nested block, to prove indented lines are not
+# mistaken for top-level keys.
+retry:
+  attempts: 3
 """
 
     def _write(self, tmp_path, config_text, template_text=None):
@@ -811,7 +816,7 @@ excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
 
         added = sync_missing_config_keys(str(config_file), str(template_file))
 
-        assert sorted(added) == ["enable_healthcheck", "excluded_media_types"]
+        assert sorted(added) == ["enable_healthcheck", "excluded_media_types", "retry"]
         text = config_file.read_text(encoding="utf-8")
         assert "enable_healthcheck: ${ENABLE_HEALTHCHECK}" in text
         assert "excluded_media_types: ${EXCLUDED_MEDIA_TYPES}" in text
@@ -916,3 +921,16 @@ excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
             assert sync_missing_config_keys(str(config_file), str(template_file)) == []
 
         assert "Could not compare config with the bundled template" in caplog.text
+
+    @pytest.mark.unit
+    def test_nested_values_are_not_treated_as_keys(self, tmp_path):
+        """Indented lines belong to their parent key and must not become keys of their own."""
+        config_file, template_file = self._write(tmp_path, "tautulli_url: ${TAUTULLI_URL}\n")
+
+        added = sync_missing_config_keys(str(config_file), str(template_file))
+
+        assert "attempts" not in added
+        assert "retry" in added
+        text = config_file.read_text(encoding="utf-8")
+        # the nested value is not carried over on its own
+        assert "\nattempts:" not in text
