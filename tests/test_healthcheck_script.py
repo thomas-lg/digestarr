@@ -98,3 +98,40 @@ class TestProbeHttp:
         monkeypatch.setattr(script.urllib.request, "urlopen", _boom)
 
         assert script._probe_http("127.0.0.1", 8080) == 1
+
+
+class TestMainIsQuiet:
+    """Tests that the probe does not pollute Docker's health log."""
+
+    @pytest.mark.unit
+    def test_config_warnings_are_suppressed(self, tmp_path, monkeypatch, caplog):
+        """
+        Docker records a probe's output on every tick, so config warnings must not
+        leak out of load_config — an empty env var should not be reported 12x/hour.
+
+        Asserted via caplog rather than stdout/stderr: logging.disable() drops records
+        before they reach any handler, whereas pytest's logging plugin would swallow
+        anything written to the stream, making a capsys assertion vacuous.
+        """
+        import logging
+
+        config_file = tmp_path / "config.yml"
+        config_file.write_text(
+            "tautulli_url: http://localhost:8181\n"
+            "tautulli_api_key: key\n"
+            "run_once: true\n"
+            # defined-but-empty optional field: load_config logs a WARNING for this
+            "days_back: ${PRS_TEST_EMPTY_VAR}\n"
+        )
+        monkeypatch.setenv("PRS_TEST_EMPTY_VAR", "")
+        monkeypatch.setenv("CONFIG_PATH", str(config_file))
+
+        script = _load_script()
+        monkeypatch.setattr(script, "_probe_process", lambda: 0)
+
+        try:
+            with caplog.at_level(logging.DEBUG):
+                assert script.main() == 0
+            assert caplog.records == [], f"the probe emitted {len(caplog.records)} log record(s)"
+        finally:
+            logging.disable(logging.NOTSET)
