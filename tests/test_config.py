@@ -18,6 +18,7 @@ from src.config import (
     _resolve_value,
     get_bootstrap_log_level,
     load_config,
+    sync_missing_config_keys,
 )
 
 
@@ -774,3 +775,144 @@ class TestExcludedMediaTypes:
 
         assert config.excluded_media_types == ["track"]
         assert "Excluding media types from the summary: track" in caplog.text
+
+
+class TestSyncMissingConfigKeys:
+    """Tests for reconciling an existing config.yml with the bundled template."""
+
+    TEMPLATE = """# Tautulli instance URL
+tautulli_url: ${TAUTULLI_URL}
+
+# Tautulli API key
+tautulli_api_key: ${TAUTULLI_API_KEY}
+
+# HTTP health endpoint for container liveness probes
+# Default: false
+enable_healthcheck: ${ENABLE_HEALTHCHECK}
+
+# Media types to exclude entirely
+excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
+"""
+
+    def _write(self, tmp_path, config_text, template_text=None):
+        config_file = tmp_path / "config.yml"
+        template_file = tmp_path / "config.yml.default"
+        config_file.write_text(config_text, encoding="utf-8")
+        template_file.write_text(self.TEMPLATE if template_text is None else template_text, encoding="utf-8")
+        return config_file, template_file
+
+    @pytest.mark.unit
+    def test_appends_only_missing_keys(self, tmp_path):
+        """Keys absent from the user's file are added; existing ones are untouched."""
+        config_file, template_file = self._write(
+            tmp_path,
+            "tautulli_url: ${TAUTULLI_URL}\ntautulli_api_key: ${TAUTULLI_API_KEY}\n",
+        )
+
+        added = sync_missing_config_keys(str(config_file), str(template_file))
+
+        assert sorted(added) == ["enable_healthcheck", "excluded_media_types"]
+        text = config_file.read_text(encoding="utf-8")
+        assert "enable_healthcheck: ${ENABLE_HEALTHCHECK}" in text
+        assert "excluded_media_types: ${EXCLUDED_MEDIA_TYPES}" in text
+        # existing keys must not be duplicated
+        assert text.count("tautulli_url:") == 1
+
+    @pytest.mark.unit
+    def test_reproduces_the_reported_failure(self, tmp_path):
+        """
+        A pre-v1.4.0 config plus ENABLE_HEALTHCHECK=true must end up enabling the
+        endpoint — the exact scenario from the bug report, end to end.
+        """
+        config_file, template_file = self._write(
+            tmp_path,
+            "tautulli_url: ${TAUTULLI_URL}\ntautulli_api_key: ${TAUTULLI_API_KEY}\nrun_once: true\n",
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "TAUTULLI_URL": "http://tautulli:8181",
+                "TAUTULLI_API_KEY": "key",
+                "ENABLE_HEALTHCHECK": "true",
+            },
+        ):
+            # before the fix this silently loaded enable_healthcheck=False
+            assert load_config(str(config_file)).enable_healthcheck is False
+
+            sync_missing_config_keys(str(config_file), str(template_file))
+
+            assert load_config(str(config_file)).enable_healthcheck is True
+
+    @pytest.mark.unit
+    def test_carries_the_documenting_comments(self, tmp_path):
+        """An appended key keeps the comments that explain it."""
+        config_file, template_file = self._write(tmp_path, "tautulli_url: ${TAUTULLI_URL}\n")
+
+        sync_missing_config_keys(str(config_file), str(template_file))
+
+        assert "# HTTP health endpoint for container liveness probes" in config_file.read_text(encoding="utf-8")
+
+    @pytest.mark.unit
+    def test_noop_when_nothing_is_missing(self, tmp_path):
+        """An up-to-date config is left byte-for-byte alone."""
+        config_file, template_file = self._write(tmp_path, self.TEMPLATE)
+        before = config_file.read_text(encoding="utf-8")
+
+        assert sync_missing_config_keys(str(config_file), str(template_file)) == []
+        assert config_file.read_text(encoding="utf-8") == before
+
+    @pytest.mark.unit
+    def test_noop_when_template_absent(self, tmp_path):
+        """Outside the image there is no template; this must not be an error."""
+        config_file = tmp_path / "config.yml"
+        config_file.write_text("tautulli_url: x\n", encoding="utf-8")
+
+        assert sync_missing_config_keys(str(config_file), str(tmp_path / "absent.yml")) == []
+
+    @pytest.mark.unit
+    def test_noop_when_config_absent(self, tmp_path):
+        """A fresh install is seeded by the entrypoint, not by this function."""
+        template_file = tmp_path / "config.yml.default"
+        template_file.write_text(self.TEMPLATE, encoding="utf-8")
+
+        assert sync_missing_config_keys(str(tmp_path / "absent.yml"), str(template_file)) == []
+
+    @pytest.mark.unit
+    def test_handles_missing_trailing_newline(self, tmp_path):
+        """A config not ending in a newline must not have a key glued onto its last line."""
+        config_file, template_file = self._write(tmp_path, "tautulli_url: ${TAUTULLI_URL}")
+
+        sync_missing_config_keys(str(config_file), str(template_file))
+
+        assert "tautulli_url: ${TAUTULLI_URL}\n" in config_file.read_text(encoding="utf-8")
+
+    @pytest.mark.unit
+    def test_read_only_config_warns_and_continues(self, tmp_path, caplog):
+        """An unwritable config must warn with the missing keys, not crash startup."""
+        config_file, template_file = self._write(tmp_path, "tautulli_url: ${TAUTULLI_URL}\n")
+
+        real_open = Path.open
+
+        def deny_append(self, mode="r", *args, **kwargs):
+            # Only the write-back is denied; reads must still work so the function
+            # reaches the append and reports the keys it could not add.
+            if "a" in mode:
+                raise OSError("read-only file system")
+            return real_open(self, mode, *args, **kwargs)
+
+        with patch("pathlib.Path.open", deny_append), caplog.at_level("WARNING"):
+            assert sync_missing_config_keys(str(config_file), str(template_file)) == []
+
+        assert "could not be added automatically" in caplog.text
+        assert "enable_healthcheck" in caplog.text
+
+    @pytest.mark.unit
+    def test_unreadable_files_warn_and_continue(self, tmp_path, caplog):
+        """If the config or template cannot be read, startup must proceed regardless."""
+        config_file, template_file = self._write(tmp_path, "tautulli_url: ${TAUTULLI_URL}\n")
+
+        with patch("pathlib.Path.read_text", side_effect=OSError("I/O error")), caplog.at_level("WARNING"):
+            assert sync_missing_config_keys(str(config_file), str(template_file)) == []
+
+        assert "Could not compare config with the bundled template" in caplog.text
