@@ -161,7 +161,7 @@ Before submitting:
    ./scripts/test.sh
    ```
 
-4. If you changed `requirements.txt` or `requirements-dev.txt`, regenerate the lockfiles and commit them:
+4. If you changed the dependencies in `pyproject.toml`, or `requirements-dev.txt`, regenerate the lockfiles and commit them:
 
    ```bash
    ./scripts/compile-deps.sh
