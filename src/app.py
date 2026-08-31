@@ -214,6 +214,43 @@ def _fetch_items(
     return items
 
 
+def _filter_excluded_media_types(
+    items: list[TautulliMediaItem], excluded_media_types: list[str]
+) -> list[TautulliMediaItem]:
+    """
+    Drop items whose media_type is on the exclusion list.
+
+    Applied before the payload is built so excluded entries never reach the logs,
+    the item count, or the notifier — every count the user sees stays consistent.
+
+    Args:
+        items: Filtered list of Tautulli media items
+        excluded_media_types: Lowercase media types to omit (may be empty)
+
+    Returns:
+        The items to keep; the input list unchanged when nothing is excluded
+    """
+    if not excluded_media_types:
+        return items
+
+    excluded = set(excluded_media_types)
+    kept: list[TautulliMediaItem] = []
+    dropped_by_type: dict[str, int] = {}
+
+    for item in items:
+        media_type = str(item.get("media_type", "unknown")).lower()
+        if media_type in excluded:
+            dropped_by_type[media_type] = dropped_by_type.get(media_type, 0) + 1
+        else:
+            kept.append(item)
+
+    if dropped_by_type:
+        dropped_summary = ", ".join(f"{media_type}: {count}" for media_type, count in sorted(dropped_by_type.items()))
+        logger.info("Excluded %d item(s) by media type (%s)", len(items) - len(kept), dropped_summary)
+
+    return kept
+
+
 def _build_discord_payload(items: list[TautulliMediaItem]) -> list[DiscordMediaItem]:
     """
     Build the Discord media payload from Tautulli items and log each entry.
@@ -361,6 +398,8 @@ def run_summary(config: Config) -> int:
     except Exception as e:
         logger.exception("Unexpected error while fetching recently added items: %s", e)
         return 1
+
+    items = _filter_excluded_media_types(items, config.excluded_media_types)
 
     discord_items = _build_discord_payload(items)
 

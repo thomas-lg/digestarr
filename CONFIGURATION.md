@@ -69,10 +69,32 @@ All fields are defined in `src/config.py`.
 | `run_once`             | boolean | No               | `false`                 | -                                     | `true` runs once, `false` runs scheduled                           |
 | `log_level`            | string  | No               | `"INFO"`                | DEBUG, INFO, WARNING, ERROR, CRITICAL | Logging verbosity                                                  |
 | `initial_batch_size`   | integer | No               | Adaptive\*\*            | 1-10000                               | Tautulli API batch size override                                   |
+| `excluded_media_types` | list    | No               | `[]`                    | movie, show, season, episode, album, track | Media types omitted from the summary                          |
 
 \* `cron_schedule` is required when `run_once` is `false`.
 
 \*\* Adaptive default: `100` (≤7 days), `200` (≤30 days), `500` (>30 days).
+
+### Excluding media types
+
+`excluded_media_types` drops entries before they reach the logs, the item count and the
+notification, so every total stays consistent with what is shown. Unknown values are
+rejected at startup rather than silently ignored.
+
+In `config.yml` it is a list:
+
+```yaml
+excluded_media_types:
+  - track
+  - album
+```
+
+Because environment variable interpolation always yields a string, the same setting is
+also accepted comma-separated, which is the usual form for container deployments:
+
+```bash
+EXCLUDED_MEDIA_TYPES=track,album
+```
 
 ---
 
@@ -146,6 +168,7 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `RUN_ONCE`            | `run_once`            | One-shot mode override       |
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
+| `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
 | `TZ`                  | N/A                   | Container timezone           |
 | `PUID`                | N/A                   | User ID (file permissions)   |
 | `PGID`                | N/A                   | Group ID (file permissions)  |

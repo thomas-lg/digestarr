@@ -12,6 +12,7 @@ from src.app import (
     _build_discord_payload,
     _calculate_batch_params,
     _fetch_items,
+    _filter_excluded_media_types,
     _format_display_title,
     _get_config_path,
     _send_discord_notification,
@@ -985,3 +986,113 @@ class TestMainScheduledAndFatalPaths:
         result = main()
 
         assert result == 1
+
+
+class TestFilterExcludedMediaTypes:
+    """Tests for _filter_excluded_media_types."""
+
+    @staticmethod
+    def _items() -> list[TautulliMediaItem]:
+        return [
+            cast(TautulliMediaItem, {"media_type": "movie", "title": "Inception", "added_at": 1}),
+            cast(TautulliMediaItem, {"media_type": "track", "title": "Song", "added_at": 2}),
+            cast(TautulliMediaItem, {"media_type": "album", "title": "Record", "added_at": 3}),
+        ]
+
+    @pytest.mark.unit
+    def test_empty_exclusion_returns_input_unchanged(self):
+        """Test that no exclusions is a no-op, preserving current behaviour."""
+        items = self._items()
+        assert _filter_excluded_media_types(items, []) is items
+
+    @pytest.mark.unit
+    def test_drops_excluded_types(self):
+        """Test that only the excluded media types are removed."""
+        result = _filter_excluded_media_types(self._items(), ["track", "album"])
+        assert [item["media_type"] for item in result] == ["movie"]
+
+    @pytest.mark.unit
+    def test_matching_is_case_insensitive(self):
+        """Test that a Tautulli payload with unexpected casing is still matched."""
+        items = [cast(TautulliMediaItem, {"media_type": "TRACK", "title": "Song", "added_at": 1})]
+        assert _filter_excluded_media_types(items, ["track"]) == []
+
+    @pytest.mark.unit
+    def test_excluding_everything_yields_empty_list(self):
+        """Test the degenerate case where nothing survives the filter."""
+        result = _filter_excluded_media_types(self._items(), ["movie", "track", "album"])
+        assert result == []
+
+    @pytest.mark.unit
+    def test_logs_dropped_counts(self, caplog):
+        """Test that the summary line reports what was dropped."""
+        with caplog.at_level(logging.INFO):
+            _filter_excluded_media_types(self._items(), ["track", "album"])
+        assert "Excluded 2 item(s) by media type" in caplog.text
+        assert "album: 1" in caplog.text
+        assert "track: 1" in caplog.text
+
+    @pytest.mark.unit
+    def test_no_log_when_nothing_matches(self, caplog):
+        """Test that a configured exclusion matching nothing stays silent."""
+        with caplog.at_level(logging.INFO):
+            result = _filter_excluded_media_types(self._items(), ["episode"])
+        assert len(result) == 3
+        assert "Excluded" not in caplog.text
+
+
+class TestRunSummaryExcludesMediaTypes:
+    """End-to-end test that run_summary honours excluded_media_types."""
+
+    @pytest.mark.unit
+    def test_excluded_items_reach_neither_notifier_nor_totals(self, monkeypatch, caplog):
+        """Excluded items must be absent from the payload, the total_count and the final log."""
+
+        class StubTautulliClient:
+            def get_recently_added(self, days, count):
+                timestamp = int(datetime.now(UTC).timestamp())
+                return {
+                    "recently_added": [
+                        {"media_type": "movie", "title": "Inception", "added_at": timestamp},
+                        {"media_type": "track", "title": "Song", "added_at": timestamp},
+                        {"media_type": "album", "title": "Record", "added_at": timestamp},
+                    ]
+                }
+
+            def get_server_identity(self):
+                return {"machine_identifier": "server-id"}
+
+        sent: dict[str, object] = {}
+
+        class StubDiscordNotifier:
+            def __init__(self, webhook_url, plex_url, plex_server_id):
+                pass
+
+            def send_summary(self, media_items, days_back, total_count):
+                sent["media_items"] = media_items
+                sent["total_count"] = total_count
+                return True
+
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.DiscordNotifier", StubDiscordNotifier)
+
+        config = Config.model_validate(
+            {
+                "tautulli_url": "http://tautulli:8181",
+                "tautulli_api_key": "secret",
+                "run_once": True,
+                "discord_webhook_url": "https://discord.example/webhook",
+                "excluded_media_types": ["track", "album"],
+            }
+        )
+
+        with caplog.at_level(logging.INFO):
+            assert run_summary(config) == 0
+
+        media_items = cast(list[dict[str, object]], sent["media_items"])
+        assert [item["type"] for item in media_items] == ["movie"]
+        # The count handed to the notifier and the closing log line must both
+        # reflect the post-filter total, not the raw Tautulli count.
+        assert sent["total_count"] == 1
+        assert "✅ Run complete: 1 items" in caplog.text
+        assert "Song" not in caplog.text

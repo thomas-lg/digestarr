@@ -24,6 +24,7 @@ class ConfigInput(TypedDict, total=False):
     run_once: bool
     log_level: str
     initial_batch_size: int | None
+    excluded_media_types: list[str]
 
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ type ConfigScalar = str | int | float | bool | None
 type ConfigValue = ConfigScalar | list["ConfigValue"] | dict[str, "ConfigValue"]
 
 _VALID_LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+
+# Media types Tautulli reports and that the summary knows how to render.
+# Kept in sync with the formatting branches in app._format_display_title and
+# discord_client.DiscordNotifier._group_items_by_type.
+_VALID_MEDIA_TYPES = ["movie", "show", "season", "episode", "album", "track"]
 
 
 def _validate_log_level_str(v: str) -> str:
@@ -250,6 +256,37 @@ class Config(BaseModel):
     initial_batch_size: int | None = Field(
         None, description="Override batch size for Tautulli API fetching", ge=1, le=10000
     )
+    excluded_media_types: list[str] = Field(
+        default_factory=list,
+        description=("Media types to omit from the summary entirely " f"(any of: {', '.join(_VALID_MEDIA_TYPES)})"),
+    )
+
+    @field_validator("excluded_media_types", mode="before")
+    @classmethod
+    def coerce_excluded_media_types(cls, v: object) -> object:
+        """
+        Accept a comma-separated string as well as a YAML list.
+
+        Environment variable interpolation (${EXCLUDED_MEDIA_TYPES}) always yields a
+        string, so Docker users can set EXCLUDED_MEDIA_TYPES=track,album and get the
+        same result as a YAML list in config.yml.
+        """
+        if isinstance(v, str):
+            return [part for part in (piece.strip() for piece in v.split(",")) if part]
+        return v
+
+    @field_validator("excluded_media_types")
+    @classmethod
+    def validate_excluded_media_types(cls, v: list[str]) -> list[str]:
+        """Normalise media types to lowercase and reject unknown ones."""
+        normalised: list[str] = []
+        for media_type in v:
+            candidate = media_type.strip().lower()
+            if candidate not in _VALID_MEDIA_TYPES:
+                raise ValueError(f"excluded_media_types must contain only {_VALID_MEDIA_TYPES}, got '{media_type}'")
+            if candidate not in normalised:
+                normalised.append(candidate)
+        return normalised
 
     @field_validator("log_level")
     @classmethod
@@ -344,6 +381,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Config:
         "configured" if config.discord_webhook_url else "not configured",
         config.cron_schedule if not config.run_once else "N/A (run_once)",
     )
+    if config.excluded_media_types:
+        logger.info("Excluding media types from the summary: %s", ", ".join(config.excluded_media_types))
 
     return config
 
