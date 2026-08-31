@@ -86,6 +86,15 @@ plex_server_id: ${PLEX_SERVER_ID}
 # Default: INFO
 log_level: ${LOG_LEVEL}
 
+# Media types to exclude from the summary entirely
+# Valid values: movie, show, season, episode, album, track
+# Default: none excluded
+# Example (skip the music library):
+#   excluded_media_types:
+#     - track
+#     - album
+excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
+
 # Tautulli API batch size (advanced performance tuning)
 # Default: Adaptive (100 for ≤7 days, 200 for ≤30 days, 500 for >30 days)
 initial_batch_size: ${INITIAL_BATCH_SIZE}

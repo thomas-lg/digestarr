@@ -684,3 +684,93 @@ class TestLoadConfigEdgeCases:
 
         with pytest.raises(ValueError, match="mapping"):
             load_config(str(config_file))
+
+
+class TestExcludedMediaTypes:
+    """Tests for the excluded_media_types field and its validators."""
+
+    @pytest.mark.unit
+    def test_defaults_to_empty_list(self):
+        """Test that the field is empty by default, keeping behaviour unchanged."""
+        config = Config(tautulli_url="http://localhost:8181", tautulli_api_key="key")
+        assert config.excluded_media_types == []
+
+    @pytest.mark.unit
+    def test_accepts_valid_types(self):
+        """Test that known media types are accepted as a list."""
+        config = Config(
+            tautulli_url="http://localhost:8181",
+            tautulli_api_key="key",
+            excluded_media_types=["track", "album"],
+        )
+        assert config.excluded_media_types == ["track", "album"]
+
+    @pytest.mark.unit
+    def test_normalises_case_and_whitespace(self):
+        """Test that entries are lowercased and stripped."""
+        config = Config(
+            tautulli_url="http://localhost:8181",
+            tautulli_api_key="key",
+            excluded_media_types=["  TRACK ", "Album"],
+        )
+        assert config.excluded_media_types == ["track", "album"]
+
+    @pytest.mark.unit
+    def test_deduplicates_entries(self):
+        """Test that repeated types collapse to a single entry."""
+        config = Config(
+            tautulli_url="http://localhost:8181",
+            tautulli_api_key="key",
+            excluded_media_types=["track", "TRACK"],
+        )
+        assert config.excluded_media_types == ["track"]
+
+    @pytest.mark.unit
+    def test_rejects_unknown_type(self):
+        """Test that an unknown media type fails validation rather than being ignored."""
+        with pytest.raises(ValidationError, match="excluded_media_types"):
+            Config(
+                tautulli_url="http://localhost:8181",
+                tautulli_api_key="key",
+                excluded_media_types=["movie", "bogus"],
+            )
+
+    @pytest.mark.unit
+    def test_accepts_comma_separated_string(self):
+        """Test the env-var form, where ${VAR} interpolation yields a string."""
+        config = Config(
+            tautulli_url="http://localhost:8181",
+            tautulli_api_key="key",
+            excluded_media_types=cast(list[str], "track, album"),
+        )
+        assert config.excluded_media_types == ["track", "album"]
+
+    @pytest.mark.unit
+    def test_empty_string_yields_empty_list(self):
+        """Test that an empty env var does not produce a bogus entry."""
+        config = Config(
+            tautulli_url="http://localhost:8181",
+            tautulli_api_key="key",
+            excluded_media_types=cast(list[str], ""),
+        )
+        assert config.excluded_media_types == []
+
+    @pytest.mark.unit
+    def test_logs_exclusions_at_startup(self, caplog):
+        """Test that load_config reports the configured exclusions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.yml"
+            config_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "tautulli_url": "http://localhost:8181",
+                        "tautulli_api_key": "key",
+                        "excluded_media_types": ["track"],
+                    }
+                )
+            )
+            with caplog.at_level("INFO"):
+                config = load_config(str(config_path))
+
+        assert config.excluded_media_types == ["track"]
+        assert "Excluding media types from the summary: track" in caplog.text
