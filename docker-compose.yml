@@ -16,6 +16,47 @@ services:
       - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
 
     # -------------------------------------------------------------------------
+    # HEALTH ENDPOINT (optional)
+    # -------------------------------------------------------------------------
+    # The container's own HEALTHCHECK needs nothing here: it probes the endpoint
+    # from inside, and health_host defaults to 127.0.0.1 so nothing is exposed.
+    #
+    # To let an EXTERNAL monitor (Uptime Kuma, Gatus, ...) reach it, add BOTH of
+    # these to the environment block above:
+    #
+    #   - ENABLE_HEALTHCHECK=true
+    #   - HEALTH_HOST=0.0.0.0
+    #
+    # HEALTH_HOST is the part people miss: publishing the port is not enough on
+    # its own, because the server would still be bound to the container's own
+    # loopback and the mapping has nothing to forward to.
+    #
+    # Then pick ONE of:
+    #
+    #   a) Monitor in a container (recommended) — no port mapping at all. Join
+    #      this container to the monitor's network and point the monitor at
+    #      http://plex-releases-summary:8080/health
+    #      If the monitor lives in another Compose project, attach to its network
+    #      the same way as for Tautulli below:
+    #
+    #        networks:
+    #          - <monitor_project>_default
+    #
+    #      (a container may join several networks, e.g. Tautulli's and the
+    #      monitor's.)
+    #
+    #   b) Monitor outside Docker — publish the port and use
+    #      http://<docker_host>:8080/health
+    #
+    # ports:
+    #   - "8080:8080"
+    #
+    # The endpoint is UNAUTHENTICATED. It exposes only a status string and the last
+    # run timestamp — no config, URLs or credentials — but anyone who can reach the
+    # address can read it, so prefer (a) over publishing it to your LAN.
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
     # NETWORKING
     # -------------------------------------------------------------------------
     # This container must reach the Tautulli service by hostname.

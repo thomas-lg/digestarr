@@ -12,6 +12,7 @@ import requests
 
 from config import DEFAULT_CONFIG_PATH, Config, get_bootstrap_log_level, load_config
 from discord_client import DiscordMediaItem, DiscordNotifier
+from health_server import record_run_completed, start_health_server
 from logging_config import setup_logging
 from scheduler import run_scheduled
 from tautulli_client import (
@@ -214,6 +215,43 @@ def _fetch_items(
     return items
 
 
+def _filter_excluded_media_types(
+    items: list[TautulliMediaItem], excluded_media_types: list[str]
+) -> list[TautulliMediaItem]:
+    """
+    Drop items whose media_type is on the exclusion list.
+
+    Applied before the payload is built so excluded entries never reach the logs,
+    the item count, or the notifier — every count the user sees stays consistent.
+
+    Args:
+        items: Filtered list of Tautulli media items
+        excluded_media_types: Lowercase media types to omit (may be empty)
+
+    Returns:
+        The items to keep; the input list unchanged when nothing is excluded
+    """
+    if not excluded_media_types:
+        return items
+
+    excluded = set(excluded_media_types)
+    kept: list[TautulliMediaItem] = []
+    dropped_by_type: dict[str, int] = {}
+
+    for item in items:
+        media_type = str(item.get("media_type", "unknown")).lower()
+        if media_type in excluded:
+            dropped_by_type[media_type] = dropped_by_type.get(media_type, 0) + 1
+        else:
+            kept.append(item)
+
+    if dropped_by_type:
+        dropped_summary = ", ".join(f"{media_type}: {count}" for media_type, count in sorted(dropped_by_type.items()))
+        logger.info("Excluded %d item(s) by media type (%s)", len(items) - len(kept), dropped_summary)
+
+    return kept
+
+
 def _build_discord_payload(items: list[TautulliMediaItem]) -> list[DiscordMediaItem]:
     """
     Build the Discord media payload from Tautulli items and log each entry.
@@ -362,6 +400,8 @@ def run_summary(config: Config) -> int:
         logger.exception("Unexpected error while fetching recently added items: %s", e)
         return 1
 
+    items = _filter_excluded_media_types(items, config.excluded_media_types)
+
     discord_items = _build_discord_payload(items)
 
     if config.discord_webhook_url:
@@ -371,6 +411,7 @@ def run_summary(config: Config) -> int:
         exit_code = 0
 
     logger.info("✅ Run complete: %d items in the last %d days", len(items), config.days_back)
+    record_run_completed()
     return exit_code
 
 
@@ -425,6 +466,14 @@ def main() -> int:
     else:
         # Scheduled mode: run as daemon with CRON schedule
         logger.info("📅 Starting in SCHEDULED mode")
+        # Scheduled mode only: in one-shot mode the process exits before a probe
+        # could ever reach it.
+        if config.enable_healthcheck:
+            try:
+                start_health_server(config.health_host, config.health_port)
+            except OSError as e:
+                logger.error("Could not start health endpoint on %s:%d: %s", config.health_host, config.health_port, e)
+                return 1
         # Guaranteed non-None by Pydantic model validator (validate_cron_schedule_required)
         if config.cron_schedule is None:  # pragma: no cover
             raise RuntimeError("cron_schedule must not be None when run_once is False")

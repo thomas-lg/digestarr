@@ -75,6 +75,19 @@ after modifying either file and commit the updated lockfiles.
 ./scripts/compile-deps.sh
 ```
 
+### 🩺 `healthcheck.py` - Docker HEALTHCHECK Probe
+
+Not a developer helper: this is the command the production image runs as its
+`HEALTHCHECK`. It probes `GET /health` when `enable_healthcheck` is on, and falls back
+to a process check when it is off (the default), so a container reports its health
+correctly either way.
+
+Standard library only — the production image ships no `curl`.
+
+```bash
+docker exec <container> python /app/scripts/healthcheck.py; echo $?   # 0 = healthy
+```
+
 ### 🧹 `clean.sh` - Clean Local Artifacts
 
 Remove generated test/coverage/cache files.
@@ -93,6 +106,7 @@ Remove generated test/coverage/cache files.
 | Format       | `./scripts/format.sh`              |
 | Type check   | `./scripts/typecheck.sh`           |
 | Compile deps | `./scripts/compile-deps.sh`        |
+| Health probe | `python scripts/healthcheck.py`    |
 | Clean        | `./scripts/clean.sh`               |
 
 ## Notes

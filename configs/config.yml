@@ -86,6 +86,29 @@ plex_server_id: ${PLEX_SERVER_ID}
 # Default: INFO
 log_level: ${LOG_LEVEL}
 
+# Media types to exclude from the summary entirely
+# Valid values: movie, show, season, episode, album, track
+# Default: none excluded
+# Example (skip the music library):
+#   excluded_media_types:
+#     - track
+#     - album
+excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
+
+# HTTP health endpoint for container liveness probes (scheduled mode only)
+# Default: false (no socket is opened)
+enable_healthcheck: ${ENABLE_HEALTHCHECK}
+
+# Interface the health endpoint binds to
+# Default: 127.0.0.1 — reachable only from inside the container, which is all the
+# Docker HEALTHCHECK needs. Set 0.0.0.0 (and publish the port) only if you want to
+# probe it from outside; the endpoint is unauthenticated.
+health_host: ${HEALTH_HOST}
+
+# Port for the health endpoint
+# Default: 8080
+health_port: ${HEALTH_PORT}
+
 # Tautulli API batch size (advanced performance tuning)
 # Default: Adaptive (100 for ≤7 days, 200 for ≤30 days, 500 for >30 days)
 initial_batch_size: ${INITIAL_BATCH_SIZE}
