@@ -9,6 +9,7 @@ Exits 0 when healthy, 1 otherwise. Uses only the standard library, so the image
 needs no curl.
 """
 
+import logging
 import os
 import subprocess
 import sys
@@ -43,6 +44,11 @@ def _probe_process() -> int:
 
 def main() -> int:
     """Choose the probe based on configuration and run it."""
+    # load_config logs warnings (e.g. env vars defined but empty). Docker captures a
+    # probe's output into the health log on every tick, so a liveness check must stay
+    # silent unless it has something to say about health itself.
+    logging.disable(logging.CRITICAL)
+
     try:
         config = load_config(os.getenv("CONFIG_PATH", DEFAULT_CONFIG_PATH))
     except Exception as e:
