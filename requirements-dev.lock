@@ -8,7 +8,7 @@ annotated-types==0.7.0
     # via pydantic
 apscheduler==3.11.2
     # via -r requirements.txt
-black==26.1.0
+black==26.5.1
     # via -r requirements-dev.txt
 build==1.4.0
     # via pip-tools
@@ -30,7 +30,7 @@ iniconfig==2.3.0
     # via pytest
 librt==0.8.1
     # via mypy
-mypy==1.19.1
+mypy==1.20.2
     # via -r requirements-dev.txt
 mypy-extensions==1.1.0
     # via
@@ -47,7 +47,7 @@ pathspec==1.0.4
     # via
     #   black
     #   mypy
-pip-tools==7.5.3
+pip-tools==7.6.1
     # via -r requirements-dev.txt
 platformdirs==4.9.2
     # via black
@@ -88,7 +88,7 @@ setuptools-scm==9.2.2
     # via -r requirements-dev.txt
 types-pyyaml==6.0.12.20250915
     # via -r requirements-dev.txt
-types-requests==2.32.4.20260107
+types-requests==2.33.0.20260712
     # via -r requirements-dev.txt
 typing-extensions==4.15.0
     # via
