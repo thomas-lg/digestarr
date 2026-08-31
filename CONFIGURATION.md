@@ -138,8 +138,21 @@ then reach it one of two ways:
 
 - **monitor outside Docker** — publish the port (`ports: ["8080:8080"]`) and point the
   monitor at `http://<docker-host>:8080/health`
-- **monitor in a container on the same network** — no port mapping needed; point it at
-  `http://plex-releases-summary:8080/health`
+- **monitor in a container on the same network (recommended)** — no port mapping
+  needed; point it at `http://plex-releases-summary:8080/health`. If the monitor lives
+  in a different Compose project, attach this container to the monitor's network the
+  same way as for Tautulli:
+
+  ```yaml
+  networks:
+    - <monitor_project>_default
+
+  networks:
+    <monitor_project>_default:
+      external: true
+  ```
+
+  A container can join several networks, so this coexists with Tautulli's.
 
 Configure it as a plain HTTP(s) monitor expecting `200`. The container's own
 `HEALTHCHECK` keeps working in this mode: the probe script rewrites a `0.0.0.0` bind to
