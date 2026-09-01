@@ -10,8 +10,6 @@ import requests
 
 from src.app import (
     _build_discord_payload,
-    _calculate_batch_params,
-    _fetch_items,
     _filter_excluded_media_types,
     _format_display_title,
     _get_config_path,
@@ -20,39 +18,8 @@ from src.app import (
     run_summary,
 )
 from src.config import Config
-from src.tautulli_client import TautulliClient, TautulliMediaItem
-
-
-class TestCalculateBatchParams:
-    """Tests for _calculate_batch_params function."""
-
-    @pytest.mark.unit
-    def test_batch_params_7_days(self):
-        """Test batch parameters for the <= 7 days boundary."""
-        initial, increment = _calculate_batch_params(7)
-        assert initial == 100
-        assert increment == 100
-
-    @pytest.mark.unit
-    def test_batch_params_30_days(self):
-        """Test batch parameters for the <= 30 days boundary."""
-        initial, increment = _calculate_batch_params(30)
-        assert initial == 200
-        assert increment == 200
-
-    @pytest.mark.unit
-    def test_batch_params_over_30_days(self):
-        """Test batch parameters for more than 30 days."""
-        initial, increment = _calculate_batch_params(31)
-        assert initial == 500
-        assert increment == 500
-
-    @pytest.mark.unit
-    def test_batch_params_with_override(self):
-        """Test that override parameter takes precedence over the days-based logic."""
-        initial, increment = _calculate_batch_params(7, override=1000)
-        assert initial == 1000
-        assert increment == 1000
+from src.media_source import MediaItem
+from src.tautulli_client import TautulliClient
 
 
 class TestFormatDisplayTitle:
@@ -61,7 +28,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_episode_with_valid_numbers(self):
         """Test formatting episode with valid season/episode numbers."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "episode",
             "grandparent_title": "Breaking Bad",
             "parent_media_index": "5",
@@ -74,7 +41,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_episode_with_integer_numbers(self):
         """Test formatting episode with integer season/episode numbers."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "episode",
             "grandparent_title": "The Wire",
             "parent_media_index": 1,
@@ -87,7 +54,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_episode_with_missing_numbers(self):
         """Test formatting episode with missing season/episode numbers."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "episode",
             "grandparent_title": "Unknown Show",
             "parent_media_index": "?",
@@ -100,7 +67,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_episode_with_invalid_numbers(self):
         """Test formatting episode with non-numeric season/episode values."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "episode",
             "grandparent_title": "Show Name",
             "parent_media_index": "invalid",
@@ -113,7 +80,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_episode_missing_fields(self):
         """Test formatting episode with missing fields."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "episode",
             # Missing grandparent_title, parent_media_index, etc.
         }
@@ -124,14 +91,14 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_season(self):
         """Test formatting season."""
-        item: TautulliMediaItem = {"media_type": "season", "parent_title": "The Sopranos", "media_index": "3"}
+        item: MediaItem = {"media_type": "season", "parent_title": "The Sopranos", "media_index": "3"}
         result = _format_display_title(item)
         assert result == "The Sopranos - Season 3"
 
     @pytest.mark.unit
     def test_format_season_missing_fields(self):
         """Test formatting season with missing fields."""
-        item: TautulliMediaItem = {"media_type": "season", "media_index": "1"}
+        item: MediaItem = {"media_type": "season", "media_index": "1"}
         result = _format_display_title(item)
         assert "Unknown Show" in result
         assert "Season 1" in result
@@ -139,21 +106,21 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_show_with_year(self):
         """Test formatting show with year."""
-        item: TautulliMediaItem = {"media_type": "show", "title": "Stranger Things", "year": "2016"}
+        item: MediaItem = {"media_type": "show", "title": "Stranger Things", "year": "2016"}
         result = _format_display_title(item)
         assert result == "Stranger Things (2016)"
 
     @pytest.mark.unit
     def test_format_show_without_year(self):
         """Test formatting show without year."""
-        item: TautulliMediaItem = {"media_type": "show", "title": "New Show"}
+        item: MediaItem = {"media_type": "show", "title": "New Show"}
         result = _format_display_title(item)
         assert result == "New Show (New Series)"
 
     @pytest.mark.unit
     def test_format_track(self):
         """Test formatting music track."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "track",
             "grandparent_title": "The Beatles",
             "parent_title": "Abbey Road",
@@ -165,7 +132,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_track_missing_fields(self):
         """Test formatting track with missing fields."""
-        item: TautulliMediaItem = {"media_type": "track", "title": "Song Name"}
+        item: MediaItem = {"media_type": "track", "title": "Song Name"}
         result = _format_display_title(item)
         assert "Unknown Artist" in result
         assert "Unknown Album" in result
@@ -174,7 +141,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_album(self):
         """Test formatting music album."""
-        item: TautulliMediaItem = {
+        item: MediaItem = {
             "media_type": "album",
             "parent_title": "Pink Floyd",
             "title": "Dark Side of the Moon",
@@ -185,7 +152,7 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_album_missing_fields(self):
         """Test formatting album with missing fields."""
-        item: TautulliMediaItem = {"media_type": "album", "title": "Album Name"}
+        item: MediaItem = {"media_type": "album", "title": "Album Name"}
         result = _format_display_title(item)
         assert "Unknown Artist" in result
         assert "Album Name" in result
@@ -193,42 +160,42 @@ class TestFormatDisplayTitle:
     @pytest.mark.unit
     def test_format_movie_with_year(self):
         """Test formatting movie with year."""
-        item: TautulliMediaItem = {"media_type": "movie", "title": "The Shawshank Redemption", "year": "1994"}
+        item: MediaItem = {"media_type": "movie", "title": "The Shawshank Redemption", "year": "1994"}
         result = _format_display_title(item)
         assert result == "The Shawshank Redemption (1994)"
 
     @pytest.mark.unit
     def test_format_movie_without_year(self):
         """Test formatting movie without year."""
-        item: TautulliMediaItem = {"media_type": "movie", "title": "New Movie"}
+        item: MediaItem = {"media_type": "movie", "title": "New Movie"}
         result = _format_display_title(item)
         assert result == "New Movie"
 
     @pytest.mark.unit
     def test_format_movie_missing_fields(self):
         """Test formatting movie with missing fields."""
-        item: TautulliMediaItem = {"media_type": "movie"}
+        item: MediaItem = {"media_type": "movie"}
         result = _format_display_title(item)
         assert result == "Unknown Movie"
 
     @pytest.mark.unit
     def test_format_unknown_media_type(self):
         """Test formatting unknown media type."""
-        item: TautulliMediaItem = {"media_type": "unknown_type", "title": "Some Media"}
+        item: MediaItem = {"media_type": "unknown_type", "title": "Some Media"}
         result = _format_display_title(item)
         assert result == "Some Media"
 
     @pytest.mark.unit
     def test_format_no_media_type(self):
         """Test formatting when media_type is missing."""
-        item: TautulliMediaItem = {"title": "Some Title"}
+        item: MediaItem = {"title": "Some Title"}
         result = _format_display_title(item)
         assert result == "Some Title"
 
     @pytest.mark.unit
     def test_format_unknown_type_without_title(self):
         """Test that the else-branch returns 'Unknown' when no title is present."""
-        item: TautulliMediaItem = {"media_type": "unknown"}
+        item: MediaItem = {"media_type": "unknown"}
         result = _format_display_title(item)
         assert result == "Unknown"
 
@@ -240,8 +207,15 @@ class TestRunSummary:
     def test_run_summary_fails_in_run_once_when_discord_send_fails(self, monkeypatch):
         """Discord delivery errors should produce non-zero exit code in one-shot mode."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 timestamp = int(datetime.now(UTC).timestamp())
                 return {"recently_added": [{"media_type": "movie", "title": "Movie", "added_at": timestamp}]}
 
@@ -257,7 +231,7 @@ class TestRunSummary:
             def send_summary(self, media_items, days_back, total_count):
                 raise requests.RequestException("network timeout")
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
         monkeypatch.setattr("src.app.DiscordNotifier", StubDiscordNotifier)
 
         config = Config.model_validate(
@@ -275,8 +249,15 @@ class TestRunSummary:
     def test_run_summary_keeps_scheduled_mode_non_fatal_on_discord_error(self, monkeypatch):
         """Discord errors should not fail scheduled executions."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 timestamp = int(datetime.now(UTC).timestamp())
                 return {"recently_added": [{"media_type": "movie", "title": "Movie", "added_at": timestamp}]}
 
@@ -292,7 +273,7 @@ class TestRunSummary:
             def send_summary(self, media_items, days_back, total_count):
                 raise requests.RequestException("network timeout")
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
         monkeypatch.setattr("src.app.DiscordNotifier", StubDiscordNotifier)
 
         config = Config.model_validate(
@@ -310,14 +291,21 @@ class TestRunSummary:
     def test_run_summary_limits_info_output_per_media_type(self, monkeypatch, caplog):
         """INFO logging should show at most 10 entries per media type."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 timestamp = int(datetime.now(UTC).timestamp())
                 movies = [{"media_type": "movie", "title": f"Movie {i}", "added_at": timestamp} for i in range(1, 13)]
                 shows = [{"media_type": "show", "title": f"Show {i}", "added_at": timestamp} for i in range(1, 12)]
                 return {"recently_added": movies + shows}
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
 
         config = Config.model_validate(
             {
@@ -340,8 +328,15 @@ class TestRunSummary:
         """Fetching should stop when the API returns fewer items than requested (hit its limit)."""
         call_counts = {"n": 0}
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 call_counts["n"] += 1
                 timestamp = int(datetime.now(UTC).timestamp())
                 # Always return 5 items regardless of how many were requested
@@ -351,7 +346,7 @@ class TestRunSummary:
                     ]
                 }
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
 
         config = Config.model_validate(
             {
@@ -377,8 +372,15 @@ class TestRunSummary:
             2: 0,
         }
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 call_counts["n"] += 1
                 oldest_ts = timestamps.get(call_counts["n"], 0)
                 items = [
@@ -389,8 +391,8 @@ class TestRunSummary:
                 items.append({"media_type": "movie", "title": "Oldest", "added_at": oldest_ts})
                 return {"recently_added": items}
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
-        monkeypatch.setattr("src.app.time.sleep", lambda _: None)
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
+        monkeypatch.setattr("src.tautulli_client.time.sleep", lambda _: None)
 
         config = Config.model_validate(
             {
@@ -409,8 +411,15 @@ class TestRunSummary:
     def test_run_summary_stops_at_max_iterations(self, monkeypatch, caplog):
         """Fetching should stop and warn when the max iteration guardrail (50) is reached."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 # Always return exactly `count` items, all recent → always triggers another iteration
                 timestamp = int(datetime.now(UTC).timestamp())
                 return {
@@ -419,8 +428,8 @@ class TestRunSummary:
                     ]
                 }
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
-        monkeypatch.setattr("src.app.time.sleep", lambda _: None)
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
+        monkeypatch.setattr("src.tautulli_client.time.sleep", lambda _: None)
 
         config = Config.model_validate(
             {
@@ -440,8 +449,15 @@ class TestRunSummary:
     def test_run_summary_stops_when_max_fetch_count_reached(self, monkeypatch):
         """Iterative fetching should stop once the max fetch count guardrail is reached."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 timestamp = int(datetime.now(UTC).timestamp())
                 return {
                     "recently_added": [
@@ -449,8 +465,8 @@ class TestRunSummary:
                     ]
                 }
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
-        monkeypatch.setattr("src.app.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
+        monkeypatch.setattr("src.tautulli_client.time.sleep", lambda _seconds: None)
 
         config = Config.model_validate(
             {
@@ -534,7 +550,7 @@ class TestBuildDiscordPayloadDebugPath:
         from src.app import _build_discord_payload
 
         timestamp = int(datetime.now(UTC).timestamp())
-        items: list[TautulliMediaItem] = [
+        items: list[MediaItem] = [
             {"media_type": "movie", "title": "Movie X", "added_at": timestamp},
         ]
         # Enable DEBUG on the 'app' logger so debug_enabled = True inside _build_discord_payload
@@ -557,7 +573,7 @@ class TestBuildDiscordPayloadDebugPath:
         from src.app import _build_discord_payload
 
         timestamp = int(datetime.now(UTC).timestamp())
-        items: list[TautulliMediaItem] = [
+        items: list[MediaItem] = [
             {"media_type": "movie", "title": "Movie With Key", "added_at": timestamp, "rating_key": 42},
         ]
         result = _build_discord_payload(items)
@@ -583,48 +599,6 @@ class TestGetConfigPath:
         assert _get_config_path() == DEFAULT_CONFIG_PATH
 
 
-class TestFetchItemsEdgeCases:
-    """Tests for _fetch_items handling of different API response formats."""
-
-    @pytest.mark.unit
-    def test_list_format_response_is_handled(self):
-        """Older Tautulli API returning a bare list should be filtered and returned."""
-        timestamp = int(datetime.now(UTC).timestamp())
-
-        class StubTautulli:
-            def get_recently_added(self, days, count):
-                return [{"media_type": "movie", "title": "Movie A", "added_at": timestamp}]
-
-        result = _fetch_items(cast(TautulliClient, StubTautulli()), days=7, initial_batch_size=100)
-        assert len(result) == 1
-        assert result[0].get("title") == "Movie A"
-
-    @pytest.mark.unit
-    def test_unexpected_format_yields_empty_list(self):
-        """Response without 'recently_added' key and not a list should yield empty results."""
-
-        class StubTautulli:
-            def get_recently_added(self, days, count):
-                return {"other_key": "unexpected"}
-
-        result = _fetch_items(cast(TautulliClient, StubTautulli()), days=7, initial_batch_size=100)
-        assert result == []
-
-    @pytest.mark.unit
-    def test_empty_recently_added_stops_after_first_call(self):
-        """Empty 'recently_added' list should stop iteration immediately."""
-        call_count = {"n": 0}
-
-        class StubTautulli:
-            def get_recently_added(self, days, count):
-                call_count["n"] += 1
-                return {"recently_added": []}
-
-        result = _fetch_items(cast(TautulliClient, StubTautulli()), days=7, initial_batch_size=100)
-        assert result == []
-        assert call_count["n"] == 1
-
-
 class TestBuildDiscordPayloadSuppression:
     """Tests for _build_discord_payload suppression log when >10 items per type."""
 
@@ -634,7 +608,7 @@ class TestBuildDiscordPayloadSuppression:
         from src.app import DEFAULT_INFO_DISPLAY_LIMIT
 
         timestamp = int(datetime.now(UTC).timestamp())
-        items: list[TautulliMediaItem] = [
+        items: list[MediaItem] = [
             {"media_type": "movie", "title": f"Movie {i}", "added_at": timestamp}
             for i in range(DEFAULT_INFO_DISPLAY_LIMIT + 3)  # 3 over the limit → suppressed count = 3
         ]
@@ -673,7 +647,14 @@ class TestSendDiscordNotification:
     def test_request_exception_fetching_server_id_warns_and_continues(self, monkeypatch, caplog):
         """RequestException during server ID auto-fetch should warn and not abort."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             def get_server_identity(self):
                 raise requests.RequestException("timeout")
 
@@ -696,7 +677,14 @@ class TestSendDiscordNotification:
     def test_value_error_fetching_server_id_warns_and_continues(self, monkeypatch, caplog):
         """ValueError during server ID auto-fetch should warn and not abort."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             def get_server_identity(self):
                 raise ValueError("bad response")
 
@@ -719,7 +707,14 @@ class TestSendDiscordNotification:
     def test_empty_machine_identifier_logs_warning(self, monkeypatch, caplog):
         """Empty machine_identifier in auto-detected identity should log a warning."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             def get_server_identity(self):
                 return {"machine_identifier": ""}
 
@@ -742,7 +737,14 @@ class TestSendDiscordNotification:
     def test_discord_request_exception_run_once_returns_1(self, monkeypatch):
         """RequestException from Discord send should return 1 in run_once mode."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             pass
 
         class StubNotifier:
@@ -762,7 +764,14 @@ class TestSendDiscordNotification:
     def test_discord_value_error_run_once_returns_1(self, monkeypatch):
         """ValueError from Discord send should return 1 in run_once mode."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             pass
 
         class StubNotifier:
@@ -782,7 +791,14 @@ class TestSendDiscordNotification:
     def test_discord_generic_exception_run_once_returns_1(self, monkeypatch):
         """Unhandled exception from Discord send should return 1 in run_once mode."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             pass
 
         class StubNotifier:
@@ -802,7 +818,14 @@ class TestSendDiscordNotification:
     def test_send_summary_false_run_once_returns_1(self, monkeypatch):
         """send_summary returning False in run_once mode should return 1."""
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             pass
 
         class StubNotifier:
@@ -824,7 +847,14 @@ class TestSendDiscordNotification:
         for exc in [requests.RequestException("e"), ValueError("v"), RuntimeError("r")]:
             the_exc = exc
 
-            class StubTautulli:
+            class StubTautulli(TautulliClient):
+                def __init__(self, **kwargs):
+                    super().__init__(
+                        "http://tautulli:8181",
+                        "key",
+                        initial_batch_size=kwargs.get("initial_batch_size"),
+                    )
+
                 pass
 
             class StubNotifier:
@@ -842,7 +872,7 @@ class TestSendDiscordNotification:
 
 
 class TestRunSummaryFetchErrors:
-    """Tests for run_summary exception handling from _fetch_items."""
+    """Tests for run_summary exception handling from the media source fetch."""
 
     def _base_config(self):
         return Config.model_validate(
@@ -856,35 +886,32 @@ class TestRunSummaryFetchErrors:
 
     @pytest.mark.unit
     def test_network_error_in_fetch_returns_1(self, monkeypatch):
-        """RequestException from _fetch_items should cause run_summary to return 1."""
+        """RequestException from the fetch should cause run_summary to return 1."""
 
         def raise_net_error(*a, **kw):
             raise requests.RequestException("timeout")
 
-        monkeypatch.setattr("src.app._fetch_items", raise_net_error)
-        monkeypatch.setattr("src.app.TautulliClient", lambda *a, **kw: None)
+        monkeypatch.setattr("src.app.TautulliClient.get_items_added_since", raise_net_error)
         assert run_summary(self._base_config()) == 1
 
     @pytest.mark.unit
     def test_value_error_in_fetch_returns_1(self, monkeypatch):
-        """ValueError from _fetch_items should cause run_summary to return 1."""
+        """ValueError from the fetch should cause run_summary to return 1."""
 
         def raise_val_error(*a, **kw):
             raise ValueError("bad data")
 
-        monkeypatch.setattr("src.app._fetch_items", raise_val_error)
-        monkeypatch.setattr("src.app.TautulliClient", lambda *a, **kw: None)
+        monkeypatch.setattr("src.app.TautulliClient.get_items_added_since", raise_val_error)
         assert run_summary(self._base_config()) == 1
 
     @pytest.mark.unit
     def test_unexpected_exception_in_fetch_returns_1(self, monkeypatch):
-        """Unexpected exception from _fetch_items should cause run_summary to return 1."""
+        """Unexpected exception from the fetch should cause run_summary to return 1."""
 
         def raise_unexpected(*a, **kw):
             raise RuntimeError("something broke")
 
-        monkeypatch.setattr("src.app._fetch_items", raise_unexpected)
-        monkeypatch.setattr("src.app.TautulliClient", lambda *a, **kw: None)
+        monkeypatch.setattr("src.app.TautulliClient.get_items_added_since", raise_unexpected)
         assert run_summary(self._base_config()) == 1
 
 
@@ -930,7 +957,14 @@ class TestSendDiscordNotificationDefensiveRaise:
             }
         )
 
-        class StubTautulli:
+        class StubTautulli(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
             pass
 
         # Manually set plex_server_id to skip the auto-detect block
@@ -992,11 +1026,11 @@ class TestFilterExcludedMediaTypes:
     """Tests for _filter_excluded_media_types."""
 
     @staticmethod
-    def _items() -> list[TautulliMediaItem]:
+    def _items() -> list[MediaItem]:
         return [
-            cast(TautulliMediaItem, {"media_type": "movie", "title": "Inception", "added_at": 1}),
-            cast(TautulliMediaItem, {"media_type": "track", "title": "Song", "added_at": 2}),
-            cast(TautulliMediaItem, {"media_type": "album", "title": "Record", "added_at": 3}),
+            cast(MediaItem, {"media_type": "movie", "title": "Inception", "added_at": 1}),
+            cast(MediaItem, {"media_type": "track", "title": "Song", "added_at": 2}),
+            cast(MediaItem, {"media_type": "album", "title": "Record", "added_at": 3}),
         ]
 
     @pytest.mark.unit
@@ -1014,7 +1048,7 @@ class TestFilterExcludedMediaTypes:
     @pytest.mark.unit
     def test_matching_is_case_insensitive(self):
         """Test that a Tautulli payload with unexpected casing is still matched."""
-        items = [cast(TautulliMediaItem, {"media_type": "TRACK", "title": "Song", "added_at": 1})]
+        items = [cast(MediaItem, {"media_type": "TRACK", "title": "Song", "added_at": 1})]
         assert _filter_excluded_media_types(items, ["track"]) == []
 
     @pytest.mark.unit
@@ -1048,8 +1082,15 @@ class TestRunSummaryExcludesMediaTypes:
     def test_excluded_items_reach_neither_notifier_nor_totals(self, monkeypatch, caplog):
         """Excluded items must be absent from the payload, the total_count and the final log."""
 
-        class StubTautulliClient:
-            def get_recently_added(self, days, count):
+        class StubTautulliClient(TautulliClient):
+            def __init__(self, **kwargs):
+                super().__init__(
+                    "http://tautulli:8181",
+                    "key",
+                    initial_batch_size=kwargs.get("initial_batch_size"),
+                )
+
+            def get_recently_added(self, days=7, count=100):
                 timestamp = int(datetime.now(UTC).timestamp())
                 return {
                     "recently_added": [
@@ -1073,7 +1114,7 @@ class TestRunSummaryExcludesMediaTypes:
                 sent["total_count"] = total_count
                 return True
 
-        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient())
+        monkeypatch.setattr("src.app.TautulliClient", lambda *args, **kwargs: StubTautulliClient(**kwargs))
         monkeypatch.setattr("src.app.DiscordNotifier", StubDiscordNotifier)
 
         config = Config.model_validate(
