@@ -43,16 +43,16 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Build devcontainer image
-        run: docker build -f .devcontainer/Dockerfile.dev -t prs-devcontainer .
+        run: docker build -f .devcontainer/Dockerfile.dev -t digestarr-devcontainer .
 
       - name: Export image
-        run: docker save prs-devcontainer | gzip > prs-devcontainer.tar.gz
+        run: docker save digestarr-devcontainer | gzip > digestarr-devcontainer.tar.gz
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v7
         with:
-          name: prs-devcontainer
-          path: prs-devcontainer.tar.gz
+          name: digestarr-devcontainer
+          path: digestarr-devcontainer.tar.gz
           retention-days: 1
 
   quality:
@@ -67,26 +67,26 @@ jobs:
       - name: Download image artifact
         uses: actions/download-artifact@v8
         with:
-          name: prs-devcontainer
+          name: digestarr-devcontainer
 
       - name: Load image
-        run: docker load < prs-devcontainer.tar.gz
+        run: docker load < digestarr-devcontainer.tar.gz
 
       - name: Run formatting checks (Black)
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app prs-devcontainer black --check src tests
+          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer black --check src tests
 
       - name: Run linting checks (Ruff)
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app prs-devcontainer ruff check src tests
+          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer ruff check src tests
 
       - name: Run type checks (mypy)
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app -e PYTHONPATH=src prs-devcontainer mypy src
+          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app -e PYTHONPATH=src digestarr-devcontainer mypy src
 
       - name: Check lockfiles are up to date
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app prs-devcontainer sh -c "
+          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer sh -c "
             pip-compile pyproject.toml --output-file requirements.lock --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
             pip-compile pyproject.toml requirements-dev.txt --output-file requirements-dev.lock --annotate --quiet --strip-extras --cache-dir /tmp/.cache
           "
@@ -109,14 +109,14 @@ jobs:
       - name: Download image artifact
         uses: actions/download-artifact@v8
         with:
-          name: prs-devcontainer
+          name: digestarr-devcontainer
 
       - name: Load image
-        run: docker load < prs-devcontainer.tar.gz
+        run: docker load < digestarr-devcontainer.tar.gz
 
       - name: Run tests (pytest)
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app -e PYTHONPATH=src prs-devcontainer pytest
+          docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app -e PYTHONPATH=src digestarr-devcontainer pytest
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6

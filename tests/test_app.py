@@ -511,7 +511,7 @@ class TestMain:
         main()
 
         stdout = capsys.readouterr().out
-        assert "PRS" in stdout or "Digestarr" in stdout, "Expected banner in stdout"
+        assert "Digestarr" in stdout, "Expected the banner in stdout"
         assert "v1.2.3" in stdout
 
         log_records = [r.message for r in caplog.records if "Digestarr" in r.message]
