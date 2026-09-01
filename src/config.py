@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 ENV_VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
 REQUIRED_FIELDS = {"tautulli_url", "tautulli_api_key"}
 DEFAULT_CONFIG_PATH = "/app/configs/config.yml"
+# Template baked into the image by the Dockerfile; the source of truth for which
+# keys a given version understands.
+DEFAULT_CONFIG_TEMPLATE_PATH = "/app/config.yml.default"
+TOP_LEVEL_KEY_PATTERN = re.compile(r"^([a-z_][a-z0-9_]*):", re.MULTILINE)
 
 type ConfigScalar = str | int | float | bool | None
 type ConfigValue = ConfigScalar | list["ConfigValue"] | dict[str, "ConfigValue"]
@@ -334,6 +338,109 @@ class Config(BaseModel):
                     )
 
         return self
+
+
+def _extract_key_blocks(template: str) -> dict[str, str]:
+    """
+    Split a config template into per-key blocks, each carrying its own comments.
+
+    The comment lines immediately above a key document what it does, so they travel
+    with the key when it is copied into a user's config.
+
+    Args:
+        template: Full text of the template file
+
+    Returns:
+        Mapping of top-level key name to its comment block plus key line
+    """
+    blocks: dict[str, str] = {}
+    pending: list[str] = []
+
+    for line in template.splitlines():
+        if line.startswith("#"):
+            pending.append(line)
+            continue
+        if not line.strip():
+            # A blank line ends a comment block that is not attached to a key.
+            pending = []
+            continue
+
+        match = TOP_LEVEL_KEY_PATTERN.match(line)
+        if match:
+            blocks[match.group(1)] = "\n".join([*pending, line])
+        pending = []
+
+    return blocks
+
+
+def sync_missing_config_keys(
+    config_path: str = DEFAULT_CONFIG_PATH,
+    template_path: str = DEFAULT_CONFIG_TEMPLATE_PATH,
+) -> list[str]:
+    """
+    Append config keys the installed version knows about but the user's file lacks.
+
+    The entrypoint only seeds config.yml when it is absent, so an installation that
+    predates a release keeps a file without the newer keys. Since environment
+    variables reach the app only through ${VAR} references inside that file, those
+    settings would otherwise be silently unreachable.
+
+    Existing content is never modified - keys are only appended, with the comments
+    that document them.
+
+    Args:
+        config_path: Path to the user's config.yml
+        template_path: Path to the version's template (config.yml.default)
+
+    Returns:
+        The key names that were added, empty if there was nothing to do
+    """
+    config_file = Path(config_path)
+    template_file = Path(template_path)
+
+    if not config_file.exists() or not template_file.exists():
+        # Fresh installs are seeded from the template by the entrypoint, and the
+        # template is absent outside the image (e.g. local development).
+        return []
+
+    try:
+        existing = config_file.read_text()
+        template = template_file.read_text()
+    except OSError as e:
+        logger.warning("Could not compare config with the bundled template: %s", e)
+        return []
+
+    existing_keys = set(TOP_LEVEL_KEY_PATTERN.findall(existing))
+    blocks = _extract_key_blocks(template)
+    missing = [key for key in blocks if key not in existing_keys]
+
+    if not missing:
+        return []
+
+    header = (
+        "# ---------------------------------------------------------------------------\n"
+        "# Added automatically on upgrade: settings this version understands that were\n"
+        "# missing from your config. Edit or remove them as you would any other field.\n"
+        "# ---------------------------------------------------------------------------\n"
+    )
+    addition = "\n\n".join(blocks[key] for key in missing)
+    separator = "" if existing.endswith("\n") else "\n"
+
+    try:
+        with config_file.open("a", encoding="utf-8") as f:
+            f.write(f"{separator}\n{header}{addition}\n")
+    except OSError as e:
+        logger.warning(
+            "New settings (%s) are missing from %s and could not be added automatically: %s. "
+            "Add them by hand to configure these options.",
+            ", ".join(missing),
+            config_path,
+            e,
+        )
+        return []
+
+    logger.info("Added new settings to %s: %s", config_path, ", ".join(missing))
+    return missing
 
 
 def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Config:
