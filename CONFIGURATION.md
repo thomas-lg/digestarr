@@ -128,7 +128,29 @@ Two differences are worth knowing before switching:
   collapses a bulk import into a single show or season entry. Tracearr exposes every
   row, so the client regroups them: episodes of one show that arrived together become
   one entry, while an isolated weekly episode stays its own. On a real library this
-  reproduces Tautulli's output exactly — 213 raw rows became the same 17 entries.
+  reproduces Tautulli's output — 213 raw rows became the same 17 entries, in the same
+  order.
+- **The two can disagree at the very edge of the window.** Plex's grouped entry is
+  atomic: it carries the timestamp of its newest member and is either inside
+  `days_back` or outside it as a whole. Tracearr's rows age out one by one, so a bulk
+  import straddling the cutoff is seen only in part, and the remainder may regroup
+  differently.
+
+  A real example, with `days_back: 7` and three episodes added within a minute:
+
+  ```
+  episodes:  09:39:11   09:39:29   09:40:06
+  cutoff:              ^ here
+  ```
+
+  Tautulli shows `Love, Death & Robots - Season 4` — its single entry is stamped
+  09:40:06 and is still inside. Tracearr sees only the 09:40:06 episode, so it has no
+  burst left to collapse and reports
+  `Love, Death & Robots - S04E01 - Can't Stop` instead.
+
+  Neither is wrong, and the difference disappears at the next run once the whole
+  import has aged out. It only affects items within minutes of the `days_back`
+  boundary, so a schedule that runs less often than `days_back` rarely meets it.
 
 ### Health endpoint
 

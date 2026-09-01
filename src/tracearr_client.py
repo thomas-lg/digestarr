@@ -285,6 +285,11 @@ class TracearrClient:
         episode that arrived on its own stays an episode, which is what keeps a weekly
         drop visible instead of being folded into its season.
 
+        Note that a burst straddling the days_back cutoff is only partly visible here,
+        since rows age out individually — unlike Plex's grouped entry, which is atomic.
+        The remainder therefore regroups on what is left, which can differ from what
+        Tautulli reports for the same moment. See CONFIGURATION.md#choosing-a-media-source.
+
         Args:
             episodes: Episode rows within the window
 
