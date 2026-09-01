@@ -1,5 +1,6 @@
 """Unit tests for Tautulli client behavior and security safeguards."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -357,3 +358,115 @@ class TestTautulliClientRetryLogic:
 
         error_records = [r for r in caplog.records if r.levelname == "ERROR"]
         assert error_records, "Expected error-level log on final failed attempt"
+
+
+def _client_returning(pages, initial_batch_size=100):
+    """Build a client whose get_recently_added replays the given payload(s)."""
+    client = TautulliClient("http://tautulli:8181", "key", initial_batch_size=initial_batch_size)
+    calls = {"n": 0, "counts": []}
+
+    def fake_get_recently_added(days=7, count=100):
+        calls["n"] += 1
+        calls["counts"].append(count)
+        payload = pages[min(calls["n"] - 1, len(pages) - 1)]
+        return payload(count) if callable(payload) else payload
+
+    client.get_recently_added = fake_get_recently_added  # type: ignore[method-assign]
+    return client, calls
+
+
+def _cutoff(days=7):
+    return datetime.now(UTC) - timedelta(days=days)
+
+
+class TestCalculateBatchParams:
+    """Tests for the batch sizing that drives the fetch loop."""
+
+    @pytest.mark.unit
+    def test_batch_params_7_days(self):
+        """Test batch parameters for the <= 7 days boundary."""
+        assert TautulliClient._calculate_batch_params(7) == (100, 100)
+
+    @pytest.mark.unit
+    def test_batch_params_30_days(self):
+        """Test batch parameters for the <= 30 days boundary."""
+        assert TautulliClient._calculate_batch_params(30) == (200, 200)
+
+    @pytest.mark.unit
+    def test_batch_params_beyond_30_days(self):
+        """Test batch parameters beyond the 30 day boundary."""
+        assert TautulliClient._calculate_batch_params(31) == (500, 500)
+
+    @pytest.mark.unit
+    def test_override_wins(self):
+        """An explicit override replaces both the initial count and the increment."""
+        assert TautulliClient._calculate_batch_params(7, override=42) == (42, 42)
+
+
+class TestGetItemsAddedSince:
+    """Tests for the pagination loop, moved here from the app layer."""
+
+    @pytest.mark.unit
+    def test_list_format_response_is_handled(self):
+        """Older Tautulli API returning a bare list should be filtered and returned."""
+        timestamp = int(datetime.now(UTC).timestamp())
+        client, _ = _client_returning([[{"media_type": "movie", "title": "Movie A", "added_at": timestamp}]])
+
+        result = client.get_items_added_since(_cutoff())
+
+        assert len(result) == 1
+        assert result[0].get("title") == "Movie A"
+
+    @pytest.mark.unit
+    def test_unexpected_format_yields_empty_list(self):
+        """A payload that is neither the dict nor the list shape yields no items."""
+        client, _ = _client_returning([{"other_key": "unexpected"}])
+
+        assert client.get_items_added_since(_cutoff()) == []
+
+    @pytest.mark.unit
+    def test_empty_recently_added_stops_after_first_call(self):
+        """An empty payload should stop iteration immediately."""
+        client, calls = _client_returning([{"recently_added": []}])
+
+        assert client.get_items_added_since(_cutoff()) == []
+        assert calls["n"] == 1
+
+    @pytest.mark.unit
+    def test_items_older_than_cutoff_are_filtered_out(self):
+        """Items outside the window must not be returned."""
+        now = int(datetime.now(UTC).timestamp())
+        old = int((datetime.now(UTC) - timedelta(days=30)).timestamp())
+        client, _ = _client_returning(
+            [
+                {
+                    "recently_added": [
+                        {"media_type": "movie", "title": "Recent", "added_at": now},
+                        {"media_type": "movie", "title": "Ancient", "added_at": old},
+                    ]
+                }
+            ]
+        )
+
+        result = client.get_items_added_since(_cutoff())
+
+        assert [item.get("title") for item in result] == ["Recent"]
+
+    @pytest.mark.unit
+    def test_batch_widens_while_oldest_item_is_still_in_range(self):
+        """A full page whose oldest item is still recent triggers a wider fetch."""
+        now = int(datetime.now(UTC).timestamp())
+        old = int((datetime.now(UTC) - timedelta(days=30)).timestamp())
+
+        def page(count):
+            # First page is full and entirely in range, forcing a second, wider call.
+            if count == 100:
+                return {"recently_added": [{"title": f"I{i}", "added_at": now} for i in range(100)]}
+            return {"recently_added": [{"title": "Older", "added_at": old}]}
+
+        client, calls = _client_returning([page])
+
+        client.get_items_added_since(_cutoff())
+
+        assert calls["counts"][0] == 100
+        assert calls["counts"][1] == 200
