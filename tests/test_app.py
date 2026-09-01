@@ -225,10 +225,10 @@ class TestRunSummary:
                 return {"machine_identifier": "server-id"}
 
         class StubDiscordNotifier:
-            def __init__(self, webhook_url, plex_url, plex_server_id):
+            def __init__(self, webhook_url, media_server_url, media_server_id):
                 self.webhook_url = webhook_url
-                self.plex_url = plex_url
-                self.plex_server_id = plex_server_id
+                self.media_server_url = media_server_url
+                self.media_server_id = media_server_id
 
             def send_summary(self, media_items, days_back, total_count):
                 raise requests.RequestException("network timeout")
@@ -267,10 +267,10 @@ class TestRunSummary:
                 return {"machine_identifier": "server-id"}
 
         class StubDiscordNotifier:
-            def __init__(self, webhook_url, plex_url, plex_server_id):
+            def __init__(self, webhook_url, media_server_url, media_server_id):
                 self.webhook_url = webhook_url
-                self.plex_url = plex_url
-                self.plex_server_id = plex_server_id
+                self.media_server_url = media_server_url
+                self.media_server_id = media_server_id
 
             def send_summary(self, media_items, days_back, total_count):
                 raise requests.RequestException("network timeout")
@@ -511,10 +511,10 @@ class TestMain:
         main()
 
         stdout = capsys.readouterr().out
-        assert "PRS" in stdout or "Plex Releases Summary" in stdout, "Expected banner in stdout"
+        assert "PRS" in stdout or "Digestarr" in stdout, "Expected banner in stdout"
         assert "v1.2.3" in stdout
 
-        log_records = [r.message for r in caplog.records if "Plex Releases Summary" in r.message]
+        log_records = [r.message for r in caplog.records if "Digestarr" in r.message]
         assert log_records, "Expected version log line"
         assert "v1.2.3" in log_records[0]
 
@@ -526,7 +526,7 @@ class TestMain:
         monkeypatch.setattr("src.app.get_bootstrap_log_level", lambda _: "INFO")
 
         def _raise_not_found(_pkg):
-            raise importlib.metadata.PackageNotFoundError("plex-releases-summary")
+            raise importlib.metadata.PackageNotFoundError("digestarr")
 
         monkeypatch.setattr("importlib.metadata.version", _raise_not_found)
         monkeypatch.setattr("src.app.load_config", lambda _: TestMain._stub_config())
@@ -538,7 +538,7 @@ class TestMain:
         stdout = capsys.readouterr().out
         assert "unknown" in stdout, "Expected 'unknown' version in printed banner"
 
-        log_records = [r.message for r in caplog.records if "Plex Releases Summary" in r.message]
+        log_records = [r.message for r in caplog.records if "Digestarr" in r.message]
         assert log_records, "Expected version log line"
         assert "unknown" in log_records[0]
 
@@ -634,14 +634,14 @@ class TestBuildDiscordPayloadSuppression:
 class TestSendDiscordNotification:
     """Tests for _send_discord_notification error-handling paths."""
 
-    def _make_config(self, *, plex_server_id=None, run_once=True):
+    def _make_config(self, *, media_server_id=None, run_once=True):
         return Config.model_validate(
             {
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": run_once,
                 "discord_webhook_url": "https://discord.example/webhook",
-                "plex_server_id": plex_server_id,
+                "media_server_id": media_server_id,
             }
         )
 
@@ -670,7 +670,7 @@ class TestSendDiscordNotification:
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         caplog.set_level("WARNING", logger="app")
         result = _send_discord_notification(
-            self._make_config(plex_server_id=None, run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id=None, run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 0
         assert any("Network error while fetching" in r.message for r in caplog.records)
@@ -700,7 +700,7 @@ class TestSendDiscordNotification:
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         caplog.set_level("WARNING", logger="app")
         result = _send_discord_notification(
-            self._make_config(plex_server_id=None, run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id=None, run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 0
         assert any("Invalid response from Tautulli" in r.message for r in caplog.records)
@@ -730,7 +730,7 @@ class TestSendDiscordNotification:
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         caplog.set_level("WARNING", logger="app")
         result = _send_discord_notification(
-            self._make_config(plex_server_id=None), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id=None), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 0
         assert any("Could not auto-detect" in r.message for r in caplog.records)
@@ -758,7 +758,7 @@ class TestSendDiscordNotification:
 
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         result = _send_discord_notification(
-            self._make_config(plex_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 1
 
@@ -785,7 +785,7 @@ class TestSendDiscordNotification:
 
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         result = _send_discord_notification(
-            self._make_config(plex_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 1
 
@@ -812,7 +812,7 @@ class TestSendDiscordNotification:
 
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         result = _send_discord_notification(
-            self._make_config(plex_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 1
 
@@ -839,7 +839,7 @@ class TestSendDiscordNotification:
 
         monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
         result = _send_discord_notification(
-            self._make_config(plex_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
+            self._make_config(media_server_id="srv", run_once=True), cast(TautulliClient, StubTautulli()), [], 7, 0
         )
         assert result == 1
 
@@ -868,7 +868,7 @@ class TestSendDiscordNotification:
 
             monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
             result = _send_discord_notification(
-                self._make_config(plex_server_id="srv", run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
+                self._make_config(media_server_id="srv", run_once=False), cast(TautulliClient, StubTautulli()), [], 7, 0
             )
             assert result == 0
 
@@ -969,8 +969,8 @@ class TestSendDiscordNotificationDefensiveRaise:
 
             pass
 
-        # Manually set plex_server_id to skip the auto-detect block
-        config_with_sid = config.model_copy(update={"plex_server_id": "srv"})
+        # Manually set media_server_id to skip the auto-detect block
+        config_with_sid = config.model_copy(update={"media_server_id": "srv"})
         result = _send_discord_notification(config_with_sid, cast(TautulliClient, StubTautulli()), [], 7, 0)
         assert result == 1
 
@@ -1108,7 +1108,7 @@ class TestRunSummaryExcludesMediaTypes:
         sent: dict[str, object] = {}
 
         class StubDiscordNotifier:
-            def __init__(self, webhook_url, plex_url, plex_server_id):
+            def __init__(self, webhook_url, media_server_url, media_server_id):
                 pass
 
             def send_summary(self, media_items, days_back, total_count):
@@ -1242,7 +1242,7 @@ class TestBuildMediaSource:
                 media_source="tracearr",
                 tracearr_url="http://tracearr:3000/",
                 tracearr_api_key="trr_pub_x",
-                plex_server_id="abc",
+                media_server_id="abc",
             )
         )
 
@@ -1250,10 +1250,10 @@ class TestBuildMediaSource:
         assert source.base_url == "http://tracearr:3000"
 
     @pytest.mark.unit
-    def test_warns_when_tracearr_has_no_plex_server_id(self, caplog):
+    def test_warns_when_tracearr_has_no_media_server_id(self, caplog):
         """
         Tracearr cannot report the Plex machine identifier, so links silently vanish
-        unless plex_server_id is set. That deserves a warning, not silence.
+        unless media_server_id is set. That deserves a warning, not silence.
         """
         with caplog.at_level(logging.WARNING):
             _build_media_source(
@@ -1264,4 +1264,4 @@ class TestBuildMediaSource:
                 )
             )
 
-        assert "cannot auto-detect the Plex server id" in caplog.text
+        assert "cannot auto-detect the media server id" in caplog.text

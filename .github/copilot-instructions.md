@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**plex-releases-summary** is a lightweight Docker container that fetches recently added media from Plex via the Tautulli API and posts rich Discord embeds summarising new movies, TV shows, episodes, and music. It runs either on a schedule (APScheduler) or as a one-shot (`RUN_ONCE=true`).
+**digestarr** is a lightweight Docker container that fetches recently added media from Plex via the Tautulli API and posts rich Discord embeds summarising new movies, TV shows, episodes, and music. It runs either on a schedule (APScheduler) or as a one-shot (`RUN_ONCE=true`).
 
 ## Tech Stack
 

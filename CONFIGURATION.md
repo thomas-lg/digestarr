@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Complete configuration guide for Plex Releases Summary.
+Complete configuration guide for Digestarr.
 
 > **Quick Start:** only 2 fields are required. See [Minimal Configuration](#minimal-configuration).
 
@@ -67,8 +67,8 @@ All fields are defined in `src/config.py`.
 | `days_back`            | integer | No               | `7`                     | ≥ 1                                   | Days to look back for new media                                    |
 | `cron_schedule`        | string  | ⚠️ Conditional\* | `"0 16 * * SUN"`        | Valid CRON                            | Schedule for automated runs                                        |
 | `discord_webhook_url`  | string  | No               | `None`                  | -                                     | Discord webhook URL                                                |
-| `plex_url`             | string  | No               | `"https://app.plex.tv"` | -                                     | Plex URL used for generated links                                  |
-| `plex_server_id`       | string  | No               | Auto-detected           | -                                     | Plex machine identifier                                            |
+| `media_server_url`     | string  | No               | `"https://app.plex.tv"` | -                                     | Media server URL used for generated links (Plex, Jellyfin, Emby)   |
+| `media_server_id`      | string  | No               | Auto-detected\*\*\*\*        | -                                     | Server identifier; required for Plex links, optional otherwise     |
 | `run_once`             | boolean | No               | `false`                 | -                                     | `true` runs once, `false` runs scheduled                           |
 | `log_level`            | string  | No               | `"INFO"`                | DEBUG, INFO, WARNING, ERROR, CRITICAL | Logging verbosity                                                  |
 | `initial_batch_size`   | integer | No               | Adaptive\*\*            | 1-10000                               | Tautulli API batch size override                                   |
@@ -81,7 +81,9 @@ All fields are defined in `src/config.py`.
 
 \*\* Adaptive default: `100` (≤7 days), `200` (≤30 days), `500` (>30 days).
 
-\*\*\* Only the selected `media_source`'s credentials are required. A Tautulli install needs `tautulli_url` and `tautulli_api_key`; a Tracearr one needs `tracearr_url` and `tracearr_api_key`.
+\*\*\* Only the selected `media_source`'s credentials are required.
+
+\*\*\*\* Auto-detected via Tautulli only. Tracearr cannot report it, so set it explicitly there. A Tautulli install needs `tautulli_url` and `tautulli_api_key`; a Tracearr one needs `tracearr_url` and `tracearr_api_key`.
 
 ### Excluding media types
 
@@ -107,8 +109,16 @@ EXCLUDED_MEDIA_TYPES=track,album
 
 ### Choosing a media source
 
-`media_source` selects where recently added media is read from. `tautulli` is the
-default and needs no change.
+`media_source` selects where recently added media is read from.
+
+**Tracearr is the recommended source** and where new features go: it fronts Plex,
+Jellyfin and Emby, and exposes data Tautulli does not. **Tautulli is in maintenance** —
+it keeps working and keeps getting fixes, but new capabilities are not backported to it.
+It stays worth choosing when you want no extra infrastructure, or you are on Plex and
+want the server id detected for you.
+
+`media_source` **still defaults to `tautulli`**, so no existing install changes
+behaviour by upgrading.
 
 ```yaml
 media_source: tracearr
@@ -121,9 +131,10 @@ need Tautulli configured at all.
 
 Two differences are worth knowing before switching:
 
-- **Plex links need `plex_server_id`.** Tracearr does not expose the Plex machine
-  identifier on its public API, so it cannot be auto-detected. The app warns once at
-  startup and omits the links unless you set the field yourself.
+- **Links need `media_server_id` set by hand.** Tracearr exposes no server identifier
+  on its public API, so it cannot be auto-detected. The app warns once at startup and
+  omits the links unless you set the field yourself. Only Plex requires it — Jellyfin
+  and Emby links are built without one.
 - **Grouping is reconstructed.** Tautulli relays Plex's *recently added* hub, which
   collapses a bulk import into a single show or season entry. Tracearr exposes every
   row, so the client regroups them: episodes of one show that arrived together become
@@ -192,7 +203,7 @@ then reach it one of two ways:
 - **monitor outside Docker** — publish the port (`ports: ["8080:8080"]`) and point the
   monitor at `http://<docker-host>:8080/health`
 - **monitor in a container on the same network (recommended)** — no port mapping
-  needed; point it at `http://plex-releases-summary:8080/health`. If the monitor lives
+  needed; point it at `http://digestarr:8080/health`. If the monitor lives
   in a different Compose project, attach this container to the monitor's network the
   same way as for Tautulli:
 
@@ -282,8 +293,8 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `DAYS_BACK`           | `days_back`           | Days lookback override       |
 | `CRON_SCHEDULE`       | `cron_schedule`       | Schedule override            |
 | `DISCORD_WEBHOOK_URL` | `discord_webhook_url` | Enable Discord notifications |
-| `PLEX_URL`            | `plex_url`            | Plex URL override            |
-| `PLEX_SERVER_ID`      | `plex_server_id`      | Plex machine id override     |
+| `MEDIA_SERVER_URL`    | `media_server_url`    | Media server URL override    |
+| `MEDIA_SERVER_ID`     | `media_server_id`     | Media server id override     |
 | `RUN_ONCE`            | `run_once`            | One-shot mode override       |
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
@@ -368,7 +379,7 @@ For broader hardening guidance, see [Security](README.md#security).
 ```yaml
 services:
   app:
-    image: ghcr.io/thomas-lg/plex-releases-summary:latest
+    image: ghcr.io/thomas-lg/digestarr:latest
     volumes:
       - ./configs:/app/configs:ro
       - ./secrets:/run/secrets:ro
@@ -383,7 +394,7 @@ services:
 ```yaml
 services:
   app:
-    image: ghcr.io/thomas-lg/plex-releases-summary:latest
+    image: ghcr.io/thomas-lg/digestarr:latest
     volumes:
       - ./configs:/app/configs:ro
       - ./secrets:/run/secrets:ro
@@ -442,7 +453,7 @@ rm configs/config.yml && docker compose restart
 - Format: `%(asctime)s | %(levelname)-7s | %(name)s | %(message)s`
 - Default level: `INFO` (shows first 10 items/type + total count)
 - Use `LOG_LEVEL=DEBUG` to log all items and API detail
-- Docker logs: `docker logs plex-releases-summary` or `docker logs -f plex-releases-summary`
+- Docker logs: `docker logs digestarr` or `docker logs -f digestarr`
 - Rotating file logs at `/app/logs/app.log`:
   - 5 MB per file
   - 5 backups + current file (6 files max)
@@ -500,7 +511,7 @@ docker compose up -d
 ```bash
 cp configs/config.yml configs/config.yml.backup
 docker compose pull && docker compose down && docker compose up -d
-docker logs -f plex-releases-summary
+docker logs -f digestarr
 ```
 
 - Use `:latest` for automatic updates.
@@ -531,7 +542,7 @@ Useful checks:
 
 ```bash
 docker network inspect bridge
-docker exec plex-releases-summary ping tautulli
+docker exec digestarr ping tautulli
 docker inspect tautulli | grep IPAddress
 ```
 
@@ -596,7 +607,7 @@ environment:
 Then inspect:
 
 ```bash
-docker logs -f plex-releases-summary
+docker logs -f digestarr
 ```
 
 ---

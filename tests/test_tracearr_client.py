@@ -25,6 +25,7 @@ def _episode(rating_key, media_id, added, season_key="2982", show_key="2947", ti
         "media_type": "episode",
         "title": title,
         "year": 2023,
+        "server_type": "plex",
         "added_at": _iso(added),
         "media_id": media_id,
         "rating_key": rating_key,
@@ -188,13 +189,19 @@ class TestGrouping:
     @staticmethod
     def _tree():
         media = {
-            SHOW_ID: {"id": SHOW_ID, "media_type": "show", "title": "Vinland Saga", "year": 2019},
+            SHOW_ID: {
+                "id": SHOW_ID,
+                "media_type": "show",
+                "server_type": "plex",
+                "title": "Vinland Saga",
+                "year": 2019,
+            },
             "ep-a": {"id": "ep-a", "media_type": "episode", "show_media_id": SHOW_ID},
         }
         children = {
             SHOW_ID: [
-                {"id": SEASON1_ID, "media_type": "season", "season_number": 1},
-                {"id": SEASON2_ID, "media_type": "season", "season_number": 2},
+                {"id": SEASON1_ID, "media_type": "season", "server_type": "plex", "season_number": 1},
+                {"id": SEASON2_ID, "media_type": "season", "server_type": "plex", "season_number": 2},
             ],
             SEASON2_ID: [{"id": "ep-a", "media_type": "episode", "episode_number": 24}],
             SEASON1_ID: [],
@@ -214,6 +221,7 @@ class TestGrouping:
         rows.append(
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "year": 2019,
                 "added_at": _iso(now),
@@ -239,6 +247,7 @@ class TestGrouping:
             _episode("2", "ep-b", now - timedelta(minutes=5), season_key=SEASON2_ID),
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -247,6 +256,7 @@ class TestGrouping:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "year": 2019,
                 "added_at": _iso(now),
@@ -330,6 +340,7 @@ class TestDeduplication:
             _episode("2", "ep-b", now - timedelta(minutes=2), season_key=SEASON2_ID),
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -338,6 +349,7 @@ class TestDeduplication:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "year": 2019,
                 "added_at": _iso(now),
@@ -359,6 +371,7 @@ class TestDeduplication:
         rows = [
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -367,6 +380,7 @@ class TestDeduplication:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "year": 2019,
                 "added_at": _iso(now),
@@ -440,11 +454,17 @@ class TestFallbackResolution:
         """Only the episodes are in the window, so the show is reached by climbing."""
         now = datetime.now(UTC)
         media = {
-            SHOW_ID: {"id": SHOW_ID, "media_type": "show", "title": "Love, Death & Robots", "year": 2019},
+            SHOW_ID: {
+                "id": SHOW_ID,
+                "media_type": "show",
+                "server_type": "plex",
+                "title": "Love, Death & Robots",
+                "year": 2019,
+            },
             "ep-a": {"id": "ep-a", "media_type": "episode", "show_media_id": SHOW_ID},
         }
         children = {
-            SHOW_ID: [{"id": SEASON2_ID, "media_type": "season", "season_number": 4}],
+            SHOW_ID: [{"id": SEASON2_ID, "media_type": "season", "server_type": "plex", "season_number": 4}],
             SEASON2_ID: [{"id": "ep-a", "media_type": "episode", "episode_number": 1}],
         }
         rows = [
@@ -464,7 +484,13 @@ class TestFallbackResolution:
         """A multi-season burst still names its show without the show row present."""
         now = datetime.now(UTC)
         media = {
-            SHOW_ID: {"id": SHOW_ID, "media_type": "show", "title": "L'Attaque des Titans", "year": 2013},
+            SHOW_ID: {
+                "id": SHOW_ID,
+                "media_type": "show",
+                "server_type": "plex",
+                "title": "L'Attaque des Titans",
+                "year": 2013,
+            },
             "ep-a": {"id": "ep-a", "media_type": "episode", "show_media_id": SHOW_ID},
         }
         rows = [
@@ -497,7 +523,7 @@ class TestFallbackResolution:
         """A broken children endpoint must not sink the whole run."""
         now = datetime.now(UTC)
         media = {
-            SHOW_ID: {"id": SHOW_ID, "media_type": "show", "title": "Silo", "year": 2023},
+            SHOW_ID: {"id": SHOW_ID, "media_type": "show", "server_type": "plex", "title": "Silo", "year": 2023},
             "ep-a": {"id": "ep-a", "media_type": "episode", "show_media_id": SHOW_ID},
         }
         transport = FakeTransport(
@@ -558,6 +584,7 @@ class TestDefensivePaths:
             _episode("2", "ep-b", now - timedelta(minutes=1), season_key="s2", show_key="2947"),
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "added_at": _iso(now),
                 "media_id": SHOW_ID,
@@ -579,6 +606,7 @@ class TestDefensivePaths:
         rows = [
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -587,6 +615,7 @@ class TestDefensivePaths:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "added_at": _iso(now),
                 "media_id": SHOW_ID,
@@ -613,7 +642,10 @@ class TestDefensivePaths:
         }
         children = {
             # The id-less season sorts first, so the walk must skip it and carry on.
-            SHOW_ID: [{"media_type": "season", "season_number": 9}, {"id": SEASON2_ID, "season_number": 2}],
+            SHOW_ID: [
+                {"media_type": "season", "server_type": "plex", "season_number": 9},
+                {"id": SEASON2_ID, "season_number": 2},
+            ],
             SEASON2_ID: [{"id": "ep-a", "episode_number": 7}],
         }
         client = _client(
@@ -671,6 +703,7 @@ class TestEdgeBranches:
         rows = [
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison inconnue",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -715,6 +748,7 @@ class TestEdgeBranches:
         rows = [
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 1",
                 "added_at": _iso(now),
                 "media_id": SEASON1_ID,
@@ -723,6 +757,7 @@ class TestEdgeBranches:
             },
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -731,6 +766,7 @@ class TestEdgeBranches:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "added_at": _iso(now),
                 "media_id": SHOW_ID,
@@ -772,6 +808,7 @@ class TestEdgeBranches:
         rows = [
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 2",
                 "added_at": _iso(now),
                 "media_id": SEASON2_ID,
@@ -780,6 +817,7 @@ class TestEdgeBranches:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "added_at": _iso(now),
                 "media_id": SHOW_ID,
@@ -838,6 +876,7 @@ class TestEdgeBranches:
             # A season row with no episodes of its own inside the window.
             {
                 "media_type": "season",
+                "server_type": "plex",
                 "title": "Saison 1",
                 "added_at": _iso(now),
                 "media_id": SEASON1_ID,
@@ -846,6 +885,7 @@ class TestEdgeBranches:
             },
             {
                 "media_type": "show",
+                "server_type": "plex",
                 "title": "Vinland Saga",
                 "added_at": _iso(now),
                 "media_id": SHOW_ID,
@@ -863,3 +903,94 @@ class TestEdgeBranches:
         assert episode["media_index"] == 24
         assert episode["parent_media_index"] == 2
         assert transport.calls.count(f"/media/{SHOW_ID}/children") == 1
+
+
+class TestServerTypePropagation:
+    """The server type has to survive grouping, or the links come out Plex-shaped."""
+
+    @pytest.mark.unit
+    def test_jellyfin_type_reaches_every_entry_shape(self, monkeypatch):
+        """A Jellyfin library must produce Jellyfin-typed movies, seasons and shows."""
+        now = datetime.now(UTC)
+        media = {
+            SHOW_ID: {"id": SHOW_ID, "title": "Une série", "year": 2020},
+            "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID},
+        }
+        children = {SHOW_ID: [{"id": SEASON2_ID, "season_number": 2}], SEASON2_ID: []}
+        rows = [
+            {
+                "media_type": "movie",
+                "title": "Un film",
+                "server_type": "jellyfin",
+                "added_at": _iso(now),
+                "rating_key": "m1",
+            },
+            # deux épisodes d'une même saison, arrivés ensemble -> entrée saison
+            _episode("1", "ep-a", now, season_key=SEASON2_ID, show_key="sk"),
+            _episode("2", "ep-b", now - timedelta(minutes=1), season_key=SEASON2_ID, show_key="sk"),
+        ]
+        for row in rows[1:]:
+            row["server_type"] = "jellyfin"
+        client = _client(FakeTransport([{"data": rows, "meta": {}}], media, children), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert {i.get("server_type") for i in items} == {"jellyfin"}
+
+    @pytest.mark.unit
+    def test_multi_season_burst_keeps_its_type(self, monkeypatch):
+        """A show entry is built by hand, so it needs the type threaded explicitly."""
+        now = datetime.now(UTC)
+        media = {SHOW_ID: {"id": SHOW_ID, "title": "Une série"}, "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID}}
+        rows = [
+            _episode("1", "ep-a", now, season_key="s1", show_key="sk"),
+            _episode("2", "ep-b", now - timedelta(minutes=1), season_key="s2", show_key="sk"),
+        ]
+        for row in rows:
+            row["server_type"] = "emby"
+        client = _client(FakeTransport([{"data": rows, "meta": {}}], media, {}), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["media_type"] == "show"
+        assert items[0]["server_type"] == "emby"
+
+    @pytest.mark.unit
+    def test_absent_server_type_is_left_off_the_entry(self, monkeypatch):
+        """
+        The field is optional in the payload. Leaving it off rather than guessing lets
+        the notifier apply its own Plex default in one place.
+        """
+        now = datetime.now(UTC)
+        media = {SHOW_ID: {"id": SHOW_ID, "title": "Une série"}, "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID}}
+        rows = [
+            _episode("1", "ep-a", now, season_key="s1", show_key="sk"),
+            _episode("2", "ep-b", now - timedelta(minutes=1), season_key="s2", show_key="sk"),
+        ]
+        for row in rows:
+            row.pop("server_type")
+        client = _client(FakeTransport([{"data": rows, "meta": {}}], media, {}), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["media_type"] == "show"
+        assert "server_type" not in items[0]
+
+    @pytest.mark.unit
+    def test_season_entry_without_a_server_type(self, monkeypatch):
+        """Same for a season built from a burst."""
+        now = datetime.now(UTC)
+        media = {SHOW_ID: {"id": SHOW_ID, "title": "Une série"}, "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID}}
+        children = {SHOW_ID: [{"id": SEASON2_ID, "season_number": 2}], SEASON2_ID: []}
+        rows = [
+            _episode("1", "ep-a", now, season_key=SEASON2_ID, show_key="sk"),
+            _episode("2", "ep-b", now - timedelta(minutes=1), season_key=SEASON2_ID, show_key="sk"),
+        ]
+        for row in rows:
+            row.pop("server_type")
+        client = _client(FakeTransport([{"data": rows, "meta": {}}], media, children), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["media_type"] == "season"
+        assert "server_type" not in items[0]

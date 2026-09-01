@@ -49,12 +49,12 @@ def _build_media_source(config: Config) -> MediaSourceClient:
         A client satisfying the MediaSourceClient protocol
     """
     if config.media_source == MEDIA_SOURCE_TRACEARR:
-        if not config.plex_server_id:
-            # Tracearr exposes no Plex machine identifier, so the links Discord shows
-            # cannot be built without this being set by hand.
+        if not config.media_server_id:
+            # Tracearr reports no server identifier of its own, so the links Discord
+            # shows cannot be built for Plex without this being set by hand.
             logger.warning(
-                "media_source is 'tracearr', which cannot auto-detect the Plex server id; "
-                "set plex_server_id to get clickable media links"
+                "media_source is 'tracearr', which cannot auto-detect the media server id; "
+                "set media_server_id to get clickable media links"
             )
         return TracearrClient(base_url=config.tracearr_url, api_key=config.tracearr_api_key)
 
@@ -231,16 +231,16 @@ def _send_discord_notification(
     """
     logger.debug("Discord webhook URL configured, sending notification...")
     try:
-        plex_server_id = config.plex_server_id
+        media_server_id = config.media_server_id
 
-        # Auto-fetch Plex Server ID from Tautulli if not provided
-        if not plex_server_id:
-            logger.debug("plex_server_id not configured, fetching from Tautulli...")
+        # Auto-fetch the server identifier from the source when not provided
+        if not media_server_id:
+            logger.debug("media_server_id not configured, fetching from the media source...")
             try:
                 server_info: ServerIdentity = source.get_server_identity()
-                plex_server_id = server_info.get("machine_identifier")
-                if plex_server_id:
-                    logger.info("Auto-detected Plex Server ID: %s", plex_server_id)
+                media_server_id = server_info.get("machine_identifier")
+                if media_server_id:
+                    logger.info("Auto-detected media server ID: %s", media_server_id)
                 else:
                     logger.warning("Could not auto-detect Plex Server ID from Tautulli")
             except requests.RequestException as e:
@@ -252,7 +252,7 @@ def _send_discord_notification(
         if webhook_url is None:
             raise RuntimeError("discord_webhook_url must not be None — ensure it is set in config.yml")
 
-        notifier = DiscordNotifier(webhook_url, config.plex_url, plex_server_id)
+        notifier = DiscordNotifier(webhook_url, config.media_server_url, media_server_id)
         success = notifier.send_summary(discord_items, days, total_count)
         if not success and config.run_once:
             return 1
@@ -329,24 +329,25 @@ def main() -> int:
     version = os.getenv("APP_VERSION") or None
     if not version:
         try:
-            version = importlib.metadata.version("plex-releases-summary")
+            version = importlib.metadata.version("digestarr")
         except importlib.metadata.PackageNotFoundError:
             version = "unknown"
 
     version_display = f"v{version}" if re.match(r"^\d+\.\d+\.\d+(?:-.*)?$", version) else version
 
     print(rf"""
-  ─────────────────────────────────
-   ____  ____  ____
-  |  _ \|  _ \/ ___|
-  | |_) | |_) \___ \
-  |  __/|  _ < ___) |
-  |_|   |_| \_\____/
+  ─────────────────────────────────────────────
+   ____  _                 _
+  |  _ \(_) __ _  ___  ___| |_ __ _ _ __ _ __
+  | | | | |/ _` |/ _ \/ __| __/ _` | '__| '__|
+  | |_| | | (_| |  __/\__ \ || (_| | |  | |
+  |____/|_|\__, |\___||___/\__\__,_|_|  |_|
+           |___/
 
-  Plex Releases Summary  ·  {version_display}
-  ─────────────────────────────────
+  Digestarr  ·  {version_display}
+  ─────────────────────────────────────────────
 """)
-    logger.info("Starting Plex Releases Summary %s", version_display)
+    logger.info("Starting Digestarr %s", version_display)
 
     # An install predating a release keeps a config.yml without the newer keys, which
     # would make those settings silently unreachable. Reconcile before loading.

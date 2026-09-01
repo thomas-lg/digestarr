@@ -56,7 +56,7 @@ def _ts(days_ago: float = 0.5) -> int:
 
 @pytest.fixture
 def config_with_discord() -> Config:
-    """Minimal config with Discord enabled and no preset plex_server_id."""
+    """Minimal config with Discord enabled and no preset media_server_id."""
     return Config.model_validate(
         {
             "tautulli_url": "http://tautulli.test:8181",
@@ -143,7 +143,7 @@ class TestHappyPath:
         ]
 
         # get_recently_added returns the old item; get_server_identity still needed
-        # because discord_webhook_url is set and plex_server_id is not pre-configured.
+        # because discord_webhook_url is set and media_server_id is not pre-configured.
         mocker.patch(
             "requests.get",
             side_effect=[_recently_added_resp(old_items), _server_identity_resp()],

@@ -1,5 +1,5 @@
 {
-  "name": "plex-releases-summary",
+  "name": "digestarr",
   "build": {
     "dockerfile": "Dockerfile.dev",
     "context": ".."

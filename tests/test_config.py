@@ -444,10 +444,10 @@ class TestConfigValidation:
             {"tautulli_url": "http://localhost:8181", "tautulli_api_key": "test_key", "run_once": True}
         )
         assert config.days_back == 7
-        assert config.plex_url == "https://app.plex.tv"
+        assert config.media_server_url == "https://app.plex.tv"
         assert config.log_level == "INFO"
         assert config.discord_webhook_url is None
-        assert config.plex_server_id is None
+        assert config.media_server_id is None
 
 
 class TestLoadConfig:
