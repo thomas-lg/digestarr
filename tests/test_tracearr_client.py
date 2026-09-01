@@ -639,3 +639,227 @@ class TestDefensivePaths:
         client.get_items_added_since(_cutoff())
 
         assert transport.calls.count("/recently-added") == 3
+
+
+class TestEdgeBranches:
+    """Cases where an optional field is simply absent from the feed."""
+
+    @pytest.mark.unit
+    def test_sanitizer_without_a_configured_token(self, monkeypatch):
+        """The regex still redacts a token that leaked from somewhere else."""
+        monkeypatch.setattr("src.tracearr_client.requests.get", lambda *a, **kw: _Response({}))
+        client = TracearrClient("http://tracearr:3000", "")
+
+        assert client._sanitize_error(RuntimeError("saw trr_pub_abc123")) == "saw trr_pub_***"
+
+    @pytest.mark.unit
+    def test_movie_without_a_rating_key_is_still_returned(self, monkeypatch):
+        """rating_key is optional in the feed; its absence must not drop the entry."""
+        now = datetime.now(UTC)
+        rows = [{"media_type": "movie", "title": "Sans clé", "added_at": _iso(now)}]
+        client = _client(FakeTransport([{"data": rows, "meta": {}}]), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["title"] == "Sans clé"
+        assert "rating_key" not in items[0]
+
+    @pytest.mark.unit
+    def test_season_entry_without_a_season_rating_key(self, monkeypatch):
+        """A season row missing its own key still renders."""
+        now = datetime.now(UTC)
+        rows = [
+            {
+                "media_type": "season",
+                "title": "Saison inconnue",
+                "added_at": _iso(now),
+                "media_id": SEASON2_ID,
+                "parent_rating_key": "2947",
+            }
+        ]
+        client = _client(FakeTransport([{"data": rows, "meta": {}}]), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["media_type"] == "season"
+        assert "rating_key" not in items[0]
+
+    @pytest.mark.unit
+    def test_episodes_without_a_show_key_are_not_grouped(self, monkeypatch):
+        """Without a shared show key there is nothing to group on, so each stands alone."""
+        now = datetime.now(UTC)
+        rows = [
+            _episode("1", "ep-a", now, season_key="s1", show_key=None),
+            _episode("2", "ep-b", now - timedelta(minutes=1), season_key="s2", show_key=None),
+        ]
+        for row in rows:
+            row["grandparent_rating_key"] = None
+        client = _client(FakeTransport([{"data": rows, "meta": {}}]), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert len(items) == 2
+        assert {i["media_type"] for i in items} == {"episode"}
+
+    @pytest.mark.unit
+    def test_season_cache_is_reused_between_lookups(self, monkeypatch):
+        """The show's children are fetched once even when two seasons are resolved."""
+        now = datetime.now(UTC)
+        media = {SHOW_ID: {"id": SHOW_ID, "title": "Vinland Saga"}}
+        children = {
+            SHOW_ID: [
+                {"id": SEASON1_ID, "season_number": 1},
+                {"id": SEASON2_ID, "season_number": 2},
+            ]
+        }
+        rows = [
+            {
+                "media_type": "season",
+                "title": "Saison 1",
+                "added_at": _iso(now),
+                "media_id": SEASON1_ID,
+                "rating_key": "2948",
+                "parent_rating_key": "2947",
+            },
+            {
+                "media_type": "season",
+                "title": "Saison 2",
+                "added_at": _iso(now),
+                "media_id": SEASON2_ID,
+                "rating_key": "2982",
+                "parent_rating_key": "2947",
+            },
+            {
+                "media_type": "show",
+                "title": "Vinland Saga",
+                "added_at": _iso(now),
+                "media_id": SHOW_ID,
+                "rating_key": "2947",
+            },
+        ]
+        transport = FakeTransport([{"data": rows, "meta": {}}], media, children)
+        client = _client(transport, monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert sorted(i["media_index"] for i in items if i["media_type"] == "season") == [1, 2]
+        assert transport.calls.count(f"/media/{SHOW_ID}/children") == 1
+        assert transport.calls.count(f"/media/{SHOW_ID}") == 1
+
+    @pytest.mark.unit
+    def test_locate_episode_handles_a_show_with_no_seasons(self, monkeypatch):
+        """An empty children payload ends the walk instead of looping."""
+        now = datetime.now(UTC)
+        media = {
+            SHOW_ID: {"id": SHOW_ID, "title": "Série vide"},
+            "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID},
+        }
+        client = _client(
+            FakeTransport([{"data": [_episode("1", "ep-a", now)], "meta": {}}], media, {SHOW_ID: []}), monkeypatch
+        )
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["grandparent_title"] == "Série vide"
+        assert "media_index" not in items[0]
+
+    @pytest.mark.unit
+    def test_season_number_absent_when_no_child_matches(self, monkeypatch):
+        """The show has seasons, but none is the one we are looking for."""
+        now = datetime.now(UTC)
+        media = {SHOW_ID: {"id": SHOW_ID, "title": "Vinland Saga"}}
+        children = {SHOW_ID: [{"id": "une-autre-saison", "season_number": 1}]}
+        rows = [
+            {
+                "media_type": "season",
+                "title": "Saison 2",
+                "added_at": _iso(now),
+                "media_id": SEASON2_ID,
+                "rating_key": "2982",
+                "parent_rating_key": "2947",
+            },
+            {
+                "media_type": "show",
+                "title": "Vinland Saga",
+                "added_at": _iso(now),
+                "media_id": SHOW_ID,
+                "rating_key": "2947",
+            },
+        ]
+        client = _client(FakeTransport([{"data": rows, "meta": {}}], media, children), monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        season = next(i for i in items if i["media_type"] == "season")
+        assert season["parent_title"] == "Vinland Saga"
+        assert "media_index" not in season
+
+    @pytest.mark.unit
+    def test_episode_absent_from_every_season(self, monkeypatch):
+        """Walking all the seasons without finding the episode leaves it unnumbered."""
+        now = datetime.now(UTC)
+        media = {
+            SHOW_ID: {"id": SHOW_ID, "title": "Silo"},
+            "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID},
+        }
+        children = {
+            SHOW_ID: [{"id": SEASON1_ID, "season_number": 1}],
+            SEASON1_ID: [{"id": "un-autre-episode", "episode_number": 3}],
+        }
+        client = _client(
+            FakeTransport([{"data": [_episode("1", "ep-a", now)], "meta": {}}], media, children), monkeypatch
+        )
+
+        items = client.get_items_added_since(_cutoff())
+
+        assert items[0]["grandparent_title"] == "Silo"
+        assert "media_index" not in items[0]
+
+    @pytest.mark.unit
+    def test_episode_lookup_reuses_the_cache_filled_by_a_season_entry(self, monkeypatch):
+        """
+        A season entry and a lone episode of the same show share one children fetch:
+        the season path warms the cache and the episode path finds it already there.
+        """
+        now = datetime.now(UTC)
+        media = {
+            SHOW_ID: {"id": SHOW_ID, "title": "Vinland Saga"},
+            "ep-a": {"id": "ep-a", "show_media_id": SHOW_ID},
+        }
+        children = {
+            SHOW_ID: [
+                {"id": SEASON1_ID, "season_number": 1},
+                {"id": SEASON2_ID, "season_number": 2},
+            ],
+            SEASON2_ID: [{"id": "ep-a", "episode_number": 24}],
+            SEASON1_ID: [],
+        }
+        rows = [
+            # A season row with no episodes of its own inside the window.
+            {
+                "media_type": "season",
+                "title": "Saison 1",
+                "added_at": _iso(now),
+                "media_id": SEASON1_ID,
+                "rating_key": "2948",
+                "parent_rating_key": "2947",
+            },
+            {
+                "media_type": "show",
+                "title": "Vinland Saga",
+                "added_at": _iso(now),
+                "media_id": SHOW_ID,
+                "rating_key": "2947",
+            },
+            # A lone episode from another season of the same show.
+            _episode("1", "ep-a", now - timedelta(minutes=1), season_key="2982", show_key="2947"),
+        ]
+        transport = FakeTransport([{"data": rows, "meta": {}}], media, children)
+        client = _client(transport, monkeypatch)
+
+        items = client.get_items_added_since(_cutoff())
+
+        episode = next(i for i in items if i["media_type"] == "episode")
+        assert episode["media_index"] == 24
+        assert episode["parent_media_index"] == 2
+        assert transport.calls.count(f"/media/{SHOW_ID}/children") == 1

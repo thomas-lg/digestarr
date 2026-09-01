@@ -521,8 +521,9 @@ class TracearrClient:
         }
         if show.get("year") is not None:
             item["year"] = show["year"]
-        if episode.grandparent_rating_key:
-            item["rating_key"] = episode.grandparent_rating_key
+        # Always set: a show entry only arises from a burst spanning several seasons,
+        # which requires the episodes to share a grandparent rating key.
+        item["rating_key"] = episode.grandparent_rating_key or ""
         return item
 
     def _as_season_entry(self, episode: TracearrLibraryItem) -> MediaItem:
