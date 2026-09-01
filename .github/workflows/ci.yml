@@ -13,17 +13,13 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/conventional-commit-types.json"
       - ".github/dependabot.yml"
+  # No paths-ignore here on purpose. The ruleset on main and develop requires
+  # build-and-push, tests and quality; a workflow skipped by path filtering never
+  # reports those checks, so they stay pending forever and the PR can never merge.
+  # Docs- and asset-only PRs therefore run the full suite, which costs a couple of
+  # minutes and confirms they broke nothing.
   pull_request:
     branches: [main, develop]
-    paths-ignore:
-      - "**.md"
-      - "LICENSE"
-      - "assets/**"
-      - ".github/release-drafter.yml"
-      - ".github/CODEOWNERS"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/conventional-commit-types.json"
-      - ".github/dependabot.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
