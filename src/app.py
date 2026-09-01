@@ -5,13 +5,13 @@ import logging
 import os
 import re
 import sys
-import time
 from datetime import UTC, datetime, timedelta
 
 import requests
 
 from config import (
     DEFAULT_CONFIG_PATH,
+    MEDIA_SOURCE_TRACEARR,
     Config,
     get_bootstrap_log_level,
     load_config,
@@ -20,13 +20,10 @@ from config import (
 from discord_client import DiscordMediaItem, DiscordNotifier
 from health_server import record_run_completed, start_health_server
 from logging_config import setup_logging
+from media_source import MediaItem, MediaSourceClient, ServerIdentity
 from scheduler import run_scheduled
-from tautulli_client import (
-    TautulliClient,
-    TautulliMediaItem,
-    TautulliRecentlyAddedPayload,
-    TautulliServerIdentity,
-)
+from tautulli_client import TautulliClient
+from tracearr_client import TracearrClient
 
 logger = logging.getLogger("app")
 
@@ -41,29 +38,34 @@ def _get_config_path() -> str:
     return os.getenv("CONFIG_PATH", DEFAULT_CONFIG_PATH)
 
 
-def _calculate_batch_params(days: int, override: int | None = None) -> tuple[int, int]:
+def _build_media_source(config: Config) -> MediaSourceClient:
     """
-    Calculate initial batch size and increment based on time range.
+    Build the media source client the configuration selects.
 
     Args:
-        days: Number of days to look back
-        override: Optional override value from environment variable
+        config: Application configuration
 
     Returns:
-        Tuple of (initial_count, increment)
+        A client satisfying the MediaSourceClient protocol
     """
-    if override is not None:
-        return (override, override)
+    if config.media_source == MEDIA_SOURCE_TRACEARR:
+        if not config.plex_server_id:
+            # Tracearr exposes no Plex machine identifier, so the links Discord shows
+            # cannot be built without this being set by hand.
+            logger.warning(
+                "media_source is 'tracearr', which cannot auto-detect the Plex server id; "
+                "set plex_server_id to get clickable media links"
+            )
+        return TracearrClient(base_url=config.tracearr_url, api_key=config.tracearr_api_key)
 
-    if days <= 7:
-        return (100, 100)
-    elif days <= 30:
-        return (200, 200)
-    else:
-        return (500, 500)
+    return TautulliClient(
+        base_url=config.tautulli_url,
+        api_key=config.tautulli_api_key,
+        initial_batch_size=config.initial_batch_size,
+    )
 
 
-def _format_display_title(item: TautulliMediaItem) -> str:
+def _format_display_title(item: MediaItem) -> str:
     """
     Format display title based on media type.
 
@@ -113,117 +115,7 @@ def _format_display_title(item: TautulliMediaItem) -> str:
         return str(title)
 
 
-def _fetch_items(
-    tautulli: TautulliClient,
-    days: int,
-    initial_batch_size: int | None = None,
-) -> list[TautulliMediaItem]:
-    """
-    Fetch recently added items from Tautulli, iterating until all items in the
-    date range are retrieved or a guardrail limit is hit, then filter by date.
-
-    Note: Tautulli lacks server-side date filtering, so batches are expanded
-    progressively and filtered client-side against the cutoff timestamp.
-
-    Args:
-        tautulli: Tautulli API client
-        days: Number of days to look back
-        initial_batch_size: Optional override for the initial batch size
-
-    Returns:
-        List of media items added within the last ``days`` days
-
-    Raises:
-        requests.RequestException: On network failures
-        ValueError: On invalid API responses
-        RuntimeError: On unexpected Tautulli errors
-    """
-    cutoff_timestamp = int((datetime.now(UTC) - timedelta(days=days)).timestamp())
-    logger.debug("Filtering items to show only those added after timestamp: %d", cutoff_timestamp)
-
-    initial_count, increment = _calculate_batch_params(days, override=initial_batch_size)
-    current_count = initial_count
-    iteration = 0
-    items: list[TautulliMediaItem] = []
-
-    while True:
-        iteration += 1
-
-        if iteration > MAX_FETCH_ITERATIONS:
-            logger.warning(
-                "Reached max fetch iterations (%d); proceeding with latest batch and date filtering",
-                MAX_FETCH_ITERATIONS,
-            )
-            break
-
-        logger.debug("Iteration %d: Fetching batch with count=%d", iteration, current_count)
-
-        # Small delay between iterations to avoid hammering the API
-        if iteration > 1:
-            time.sleep(0.2)
-
-        items_raw: TautulliRecentlyAddedPayload = tautulli.get_recently_added(days=days, count=current_count)
-
-        # Handle both dict (newer API) and list (older API) response formats
-        if isinstance(items_raw, dict) and "recently_added" in items_raw:
-            items = items_raw["recently_added"]
-        elif isinstance(items_raw, list):
-            items = items_raw
-        else:
-            items = []
-
-        if not items:
-            logger.debug("No items returned, stopping iteration")
-            break
-
-        # If we received fewer items than requested, we've hit the API's limit
-        if len(items) < current_count:
-            logger.debug("Received %d items (less than requested %d), reached API limit", len(items), current_count)
-            break
-
-        oldest_timestamp = int(items[-1].get("added_at", 0))
-
-        if oldest_timestamp >= cutoff_timestamp:
-            # Oldest item is still in range — expand the batch
-            next_count = current_count + increment
-            if next_count > MAX_FETCH_COUNT:
-                logger.warning(
-                    "Reached max fetch count limit (%d); proceeding with current results",
-                    MAX_FETCH_COUNT,
-                )
-                break
-            logger.debug(
-                "Oldest item still in range (iteration %d), fetching more items (next count: %d)",
-                iteration,
-                next_count,
-            )
-            current_count = next_count
-        else:
-            # Oldest item is outside the range — we have everything we need
-            logger.debug("Fetched beyond time range after %d iteration(s)", iteration)
-            break
-
-    # Client-side date filter
-    items_before_filter = len(items)
-    items = [item for item in items if int(item.get("added_at", 0)) >= cutoff_timestamp]
-
-    if iteration > 1:
-        logger.info(
-            "Retrieved %d items in %d iterations, filtered to %d items from last %d days",
-            items_before_filter,
-            iteration,
-            len(items),
-            days,
-        )
-    else:
-        logger.info("Retrieved %d items, filtered to %d items from last %d days", items_before_filter, len(items), days)
-
-    return items
-
-
-def _filter_excluded_media_types(
-    items: list[TautulliMediaItem], excluded_media_types: list[str]
-) -> list[TautulliMediaItem]:
+def _filter_excluded_media_types(items: list[MediaItem], excluded_media_types: list[str]) -> list[MediaItem]:
     """
     Drop items whose media_type is on the exclusion list.
 
@@ -241,7 +133,7 @@ def _filter_excluded_media_types(
         return items
 
     excluded = set(excluded_media_types)
-    kept: list[TautulliMediaItem] = []
+    kept: list[MediaItem] = []
     dropped_by_type: dict[str, int] = {}
 
     for item in items:
@@ -258,7 +150,7 @@ def _filter_excluded_media_types(
     return kept
 
 
-def _build_discord_payload(items: list[TautulliMediaItem]) -> list[DiscordMediaItem]:
+def _build_discord_payload(items: list[MediaItem]) -> list[DiscordMediaItem]:
     """
     Build the Discord media payload from Tautulli items and log each entry.
 
@@ -318,7 +210,7 @@ def _build_discord_payload(items: list[TautulliMediaItem]) -> list[DiscordMediaI
 
 def _send_discord_notification(
     config: Config,
-    tautulli: TautulliClient,
+    source: MediaSourceClient,
     discord_items: list[DiscordMediaItem],
     days: int,
     total_count: int,
@@ -328,7 +220,7 @@ def _send_discord_notification(
 
     Args:
         config: Application configuration
-        tautulli: Tautulli client used for server identity auto-detection
+        source: Media source client used for server identity auto-detection
         discord_items: Payload built by _build_discord_payload
         days: Days-back value forwarded to the notifier for display
         total_count: Total item count forwarded to the notifier for display
@@ -345,7 +237,7 @@ def _send_discord_notification(
         if not plex_server_id:
             logger.debug("plex_server_id not configured, fetching from Tautulli...")
             try:
-                server_info: TautulliServerIdentity = tautulli.get_server_identity()
+                server_info: ServerIdentity = source.get_server_identity()
                 plex_server_id = server_info.get("machine_identifier")
                 if plex_server_id:
                     logger.info("Auto-detected Plex Server ID: %s", plex_server_id)
@@ -391,11 +283,11 @@ def run_summary(config: Config) -> int:
     """
     logger.info("🚀 Starting Plex summary (last %d days)", config.days_back)
 
-    tautulli = TautulliClient(base_url=config.tautulli_url, api_key=config.tautulli_api_key)
+    source = _build_media_source(config)
 
     logger.info("Querying recently added items with iterative fetching...")
     try:
-        items = _fetch_items(tautulli, config.days_back, config.initial_batch_size)
+        items = source.get_items_added_since(datetime.now(UTC) - timedelta(days=config.days_back))
     except requests.RequestException as e:
         logger.error("Network error while fetching recently added items: %s", e)
         return 1
@@ -411,7 +303,7 @@ def run_summary(config: Config) -> int:
     discord_items = _build_discord_payload(items)
 
     if config.discord_webhook_url:
-        exit_code = _send_discord_notification(config, tautulli, discord_items, config.days_back, len(items))
+        exit_code = _send_discord_notification(config, source, discord_items, config.days_back, len(items))
     else:
         logger.debug("No Discord webhook URL configured, skipping Discord notification")
         exit_code = 0

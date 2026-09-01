@@ -934,3 +934,66 @@ retry:
         text = config_file.read_text(encoding="utf-8")
         # the nested value is not carried over on its own
         assert "\nattempts:" not in text
+
+
+class TestMediaSourceSelection:
+    """Tests for which credentials a given media source requires."""
+
+    @pytest.mark.unit
+    def test_defaults_to_tautulli(self):
+        """Existing installs keep their behaviour without touching config."""
+        config = Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key")
+
+        assert config.media_source == "tautulli"
+
+    @pytest.mark.unit
+    def test_rejects_an_unknown_source(self):
+        """A typo must fail at startup, not silently read from nowhere."""
+        with pytest.raises(ValidationError, match="media_source must be one of"):
+            Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key", media_source="plex")
+
+    @pytest.mark.unit
+    def test_normalises_case(self):
+        """Accept the value however it was typed."""
+        config = Config(tracearr_url="http://tracearr:3000", tracearr_api_key="k", media_source="  TraceArr ")
+
+        assert config.media_source == "tracearr"
+
+    @pytest.mark.unit
+    def test_tautulli_credentials_are_required_for_tautulli(self):
+        """The selected source must actually be configured."""
+        with pytest.raises(ValidationError, match="tautulli_api_key is required"):
+            Config(tautulli_url="http://tautulli:8181")
+
+    @pytest.mark.unit
+    def test_tracearr_credentials_are_required_for_tracearr(self):
+        """Switching source switches which fields are mandatory."""
+        with pytest.raises(ValidationError, match="tracearr_api_key is required"):
+            Config(media_source="tracearr", tracearr_url="http://tracearr:3000")
+
+    @pytest.mark.unit
+    def test_tautulli_fields_are_not_required_for_tracearr(self):
+        """A Tracearr-only install should not have to invent Tautulli credentials."""
+        config = Config(media_source="tracearr", tracearr_url="http://tracearr:3000", tracearr_api_key="k")
+
+        assert config.tautulli_url == ""
+
+    @pytest.mark.unit
+    def test_unresolved_reference_in_the_unselected_source_is_tolerated(self):
+        """
+        REQUIRED_FIELDS covers both sources, so ${TRACEARR_URL} survives expansion for a
+        Tautulli user. That must not fail the run.
+        """
+        config = Config(
+            tautulli_url="http://tautulli:8181",
+            tautulli_api_key="key",
+            tracearr_url="${TRACEARR_URL}",
+        )
+
+        assert config.media_source == "tautulli"
+
+    @pytest.mark.unit
+    def test_unresolved_reference_in_the_selected_source_is_an_error(self):
+        """An unset variable for the source actually in use must be reported."""
+        with pytest.raises(ValidationError, match="Unresolved environment variable"):
+            Config(media_source="tracearr", tracearr_url="${TRACEARR_URL}", tracearr_api_key="k")

@@ -59,8 +59,11 @@ All fields are defined in `src/config.py`.
 
 | Field                  | Type    | Required         | Default                 | Validation                            | Description                                                        |
 | ---------------------- | ------- | ---------------- | ----------------------- | ------------------------------------- | ------------------------------------------------------------------ |
-| **`tautulli_url`**     | string  | ✅ Yes           | -                       | -                                     | Full URL to Tautulli instance (for example `http://tautulli:8181`) |
-| **`tautulli_api_key`** | string  | ✅ Yes           | -                       | -                                     | Tautulli API key                                                   |
+| `media_source`         | string  | No               | `"tautulli"`            | tautulli, tracearr                    | Where recently added media is read from                            |
+| `tracearr_url`         | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Tracearr URL (required when `media_source` is `tracearr`)          |
+| `tracearr_api_key`     | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Tracearr public API token                                          |
+| **`tautulli_url`**     | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Full URL to Tautulli instance (for example `http://tautulli:8181`) |
+| **`tautulli_api_key`** | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Tautulli API key                                                   |
 | `days_back`            | integer | No               | `7`                     | ≥ 1                                   | Days to look back for new media                                    |
 | `cron_schedule`        | string  | ⚠️ Conditional\* | `"0 16 * * SUN"`        | Valid CRON                            | Schedule for automated runs                                        |
 | `discord_webhook_url`  | string  | No               | `None`                  | -                                     | Discord webhook URL                                                |
@@ -77,6 +80,8 @@ All fields are defined in `src/config.py`.
 \* `cron_schedule` is required when `run_once` is `false`.
 
 \*\* Adaptive default: `100` (≤7 days), `200` (≤30 days), `500` (>30 days).
+
+\*\*\* Only the selected `media_source`'s credentials are required. A Tautulli install needs `tautulli_url` and `tautulli_api_key`; a Tracearr one needs `tracearr_url` and `tracearr_api_key`.
 
 ### Excluding media types
 
@@ -98,6 +103,54 @@ also accepted comma-separated, which is the usual form for container deployments
 ```bash
 EXCLUDED_MEDIA_TYPES=track,album
 ```
+
+
+### Choosing a media source
+
+`media_source` selects where recently added media is read from. `tautulli` is the
+default and needs no change.
+
+```yaml
+media_source: tracearr
+tracearr_url: http://tracearr:3000
+tracearr_api_key: ${TRACEARR_API_KEY}   # a trr_pub_... token from Tracearr's UI
+```
+
+Only the selected source's credentials are required, so a Tracearr install does not
+need Tautulli configured at all.
+
+Two differences are worth knowing before switching:
+
+- **Plex links need `plex_server_id`.** Tracearr does not expose the Plex machine
+  identifier on its public API, so it cannot be auto-detected. The app warns once at
+  startup and omits the links unless you set the field yourself.
+- **Grouping is reconstructed.** Tautulli relays Plex's *recently added* hub, which
+  collapses a bulk import into a single show or season entry. Tracearr exposes every
+  row, so the client regroups them: episodes of one show that arrived together become
+  one entry, while an isolated weekly episode stays its own. On a real library this
+  reproduces Tautulli's output — 213 raw rows became the same 17 entries, in the same
+  order.
+- **The two can disagree at the very edge of the window.** Plex's grouped entry is
+  atomic: it carries the timestamp of its newest member and is either inside
+  `days_back` or outside it as a whole. Tracearr's rows age out one by one, so a bulk
+  import straddling the cutoff is seen only in part, and the remainder may regroup
+  differently.
+
+  A real example, with `days_back: 7` and three episodes added within a minute:
+
+  ```
+  episodes:  09:39:11   09:39:29   09:40:06
+  cutoff:              ^ here
+  ```
+
+  Tautulli shows `Love, Death & Robots - Season 4` — its single entry is stamped
+  09:40:06 and is still inside. Tracearr sees only the 09:40:06 episode, so it has no
+  burst left to collapse and reports
+  `Love, Death & Robots - S04E01 - Can't Stop` instead.
+
+  Neither is wrong, and the difference disappears at the next run once the whole
+  import has aged out. It only affects items within minutes of the `days_back`
+  boundary, so a schedule that runs less often than `days_back` rarely meets it.
 
 ### Health endpoint
 
@@ -235,6 +288,9 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
 | `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
+| `MEDIA_SOURCE`        | `media_source`        | tautulli (default) or tracearr |
+| `TRACEARR_URL`        | `tracearr_url`        | Tracearr URL                 |
+| `TRACEARR_API_KEY`    | `tracearr_api_key`    | Tracearr public API token    |
 | `ENABLE_HEALTHCHECK`  | `enable_healthcheck`  | Enable the health endpoint   |
 | `HEALTH_HOST`         | `health_host`         | Health endpoint bind address |
 | `HEALTH_PORT`         | `health_port`         | Health endpoint port         |

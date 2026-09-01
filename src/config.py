@@ -34,7 +34,16 @@ logger = logging.getLogger(__name__)
 
 # Constants
 ENV_VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
-REQUIRED_FIELDS = {"tautulli_url", "tautulli_api_key"}
+# Which fields must resolve depends on the selected media source, so this is the
+# superset; _required_fields_for() narrows it per source.
+REQUIRED_FIELDS = {"tautulli_url", "tautulli_api_key", "tracearr_url", "tracearr_api_key"}
+MEDIA_SOURCE_TAUTULLI = "tautulli"
+MEDIA_SOURCE_TRACEARR = "tracearr"
+_VALID_MEDIA_SOURCES = [MEDIA_SOURCE_TAUTULLI, MEDIA_SOURCE_TRACEARR]
+_REQUIRED_BY_SOURCE = {
+    MEDIA_SOURCE_TAUTULLI: {"tautulli_url", "tautulli_api_key"},
+    MEDIA_SOURCE_TRACEARR: {"tracearr_url", "tracearr_api_key"},
+}
 DEFAULT_CONFIG_PATH = "/app/configs/config.yml"
 # Template baked into the image by the Dockerfile; the source of truth for which
 # keys a given version understands.
@@ -233,11 +242,19 @@ class Config(BaseModel):
     - Docker secrets: ${VAR} where VAR points to a file path
     """
 
-    # Tautulli Configuration (Required)
-    tautulli_url: str = Field(
-        ..., min_length=1, description="Full URL to Tautulli instance (e.g., http://localhost:8181)"
+    # Media source selection
+    media_source: str = Field(
+        MEDIA_SOURCE_TAUTULLI,
+        description=f"Where recently added media is read from ({', '.join(_VALID_MEDIA_SOURCES)})",
     )
-    tautulli_api_key: str = Field(..., min_length=1, description="Tautulli API key for authentication")
+
+    # Tracearr Configuration (required when media_source is tracearr)
+    tracearr_url: str = Field("", description="Full URL to the Tracearr instance (e.g. http://tracearr:3000)")
+    tracearr_api_key: str = Field("", description="Tracearr public API token (trr_pub_...)")
+
+    # Tautulli Configuration (required when media_source is tautulli)
+    tautulli_url: str = Field("", description="Full URL to Tautulli instance (e.g., http://localhost:8181)")
+    tautulli_api_key: str = Field("", description="Tautulli API key for authentication")
 
     # Core Settings (Optional with defaults)
     days_back: int = Field(default=7, description="Number of days to look back for media releases (default: 7)", ge=1)
@@ -320,22 +337,37 @@ class Config(BaseModel):
             )
         return self
 
-    @model_validator(mode="after")
-    def validate_no_unresolved_env_vars(self) -> Config:
-        """Detect unresolved environment variable references in required fields."""
-        required_fields = [
-            ("tautulli_url", self.tautulli_url),
-            ("tautulli_api_key", self.tautulli_api_key),
-        ]
+    @field_validator("media_source")
+    @classmethod
+    def validate_media_source(cls, v: str) -> str:
+        """Normalise the media source and reject anything unimplemented."""
+        candidate = v.strip().lower()
+        if candidate not in _VALID_MEDIA_SOURCES:
+            raise ValueError(f"media_source must be one of {_VALID_MEDIA_SOURCES}, got '{v}'")
+        return candidate
 
-        for field_name, field_value in required_fields:
-            if isinstance(field_value, str):
-                match = ENV_VAR_PATTERN.search(field_value)
-                if match:
-                    raise ValueError(
-                        f"Unresolved environment variable: {match.group(0)} in required field '{field_name}'. "
-                        f"Ensure the environment variable is set or provide a value in config.yml."
-                    )
+    @model_validator(mode="after")
+    def validate_selected_source_is_configured(self) -> Config:
+        """
+        Require only the fields the selected source actually needs.
+
+        The unselected source's fields may legitimately be blank, or still hold an
+        unresolved ${VAR} reference because REQUIRED_FIELDS covers both sources.
+        """
+        for field_name in sorted(_REQUIRED_BY_SOURCE[self.media_source]):
+            value = getattr(self, field_name)
+            if not value:
+                raise ValueError(
+                    f"{field_name} is required when media_source is '{self.media_source}'. "
+                    "Set it in config.yml or via its environment variable."
+                )
+            match = ENV_VAR_PATTERN.search(value)
+            if match:
+                raise ValueError(
+                    f"Unresolved environment variable: {match.group(0)} in required field "
+                    f"'{field_name}'. Ensure the environment variable is set or provide a "
+                    "value in config.yml."
+                )
 
         return self
 
@@ -493,7 +525,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Config:
 
     logger.info("✅ Configuration loaded and validated successfully")
     logger.info(
-        "Config: days_back=%d, log_level=%s, run_once=%s, discord=%s, cron=%s",
+        "Config: source=%s, days_back=%d, log_level=%s, run_once=%s, discord=%s, cron=%s",
+        config.media_source,
         config.days_back,
         config.log_level,
         config.run_once,

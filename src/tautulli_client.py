@@ -3,47 +3,30 @@
 import logging
 import re
 import time
-from typing import Any, Protocol, TypedDict, TypeVar, cast
+from datetime import UTC, datetime
+from typing import Any, TypedDict, TypeVar, cast
 
 import requests
 from pydantic import BaseModel, ConfigDict, ValidationError
+
+from media_source import MediaItem, ServerIdentity
 
 # Type definitions for Tautulli API responses
 
 T = TypeVar("T", bound=BaseModel)
 
-
-class TautulliMediaItem(TypedDict, total=False):
-    added_at: int | str
-    grandparent_title: str
-    media_index: int | str
-    media_type: str
-    parent_media_index: int | str
-    parent_title: str
-    rating_key: int | str
-    title: str
-    year: int | str
+# Tautulli has no server-side date filtering, so batches are widened progressively
+# until one reaches past the cutoff. These bound that loop.
+MAX_FETCH_ITERATIONS = 50
+MAX_FETCH_COUNT = 10000
+INTER_BATCH_DELAY_SECONDS = 0.2
 
 
 class TautulliRecentlyAdded(TypedDict, total=False):
-    recently_added: list[TautulliMediaItem]
+    recently_added: list[MediaItem]
 
 
-class TautulliServerIdentity(TypedDict, total=False):
-    machine_identifier: str
-
-
-TautulliRecentlyAddedPayload = TautulliRecentlyAdded | list[TautulliMediaItem]
-
-
-class TautulliClientProtocol(Protocol):
-    """Structural interface for the Tautulli client, enabling test stubs without subclassing."""
-
-    def get_recently_added(
-        self, days: int = 7, count: int = 100
-    ) -> TautulliRecentlyAddedPayload: ...  # pragma: no cover
-
-    def get_server_identity(self) -> TautulliServerIdentity: ...  # pragma: no cover
+TautulliRecentlyAddedPayload = TautulliRecentlyAdded | list[MediaItem]
 
 
 # Pydantic models for runtime validation
@@ -96,16 +79,18 @@ class TautulliClient:
     RETRY_BACKOFF_BASE = 2  # Exponential backoff base (1s, 2s, 4s, ...)
     APIKEY_PATTERN = re.compile(r"(apikey=)[^&\s]+", re.IGNORECASE)
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, initial_batch_size: int | None = None):
         """
         Initialize Tautulli client.
 
         Args:
             base_url: Base URL of the Tautulli instance
             api_key: Tautulli API key for authentication
+            initial_batch_size: Optional override for the fetch batch size
         """
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.initial_batch_size = initial_batch_size
 
     def _sanitize_error(self, error: Exception) -> str:
         """
@@ -262,7 +247,7 @@ class TautulliClient:
         else:
             raise RuntimeError(f"Unexpected response format: {type(response_payload).__name__}")
 
-    def get_server_identity(self) -> TautulliServerIdentity:
+    def get_server_identity(self) -> ServerIdentity:
         """
         Get Plex server identity information including machine identifier.
 
@@ -276,4 +261,134 @@ class TautulliClient:
                 f"Unexpected response format for get_server_identity: expected dict, got {type(response_payload).__name__}"
             )
         validated = self._validate_response(response_payload, TautulliServerIdentityModel)
-        return cast(TautulliServerIdentity, validated.model_dump())
+        return cast(ServerIdentity, validated.model_dump())
+
+    @staticmethod
+    def _calculate_batch_params(days: int, override: int | None = None) -> tuple[int, int]:
+        """
+        Calculate initial batch size and increment based on time range.
+
+        Args:
+            days: Number of days to look back
+            override: Optional override value from configuration
+
+        Returns:
+            Tuple of (initial_count, increment)
+        """
+        if override is not None:
+            return (override, override)
+
+        if days <= 7:
+            return (100, 100)
+        elif days <= 30:
+            return (200, 200)
+        else:
+            return (500, 500)
+
+    def get_items_added_since(self, cutoff: datetime) -> list[MediaItem]:
+        """
+        Fetch every item added at or after ``cutoff``, newest first.
+
+        Tautulli has no server-side date filtering, so batches are widened
+        progressively until one reaches past the cutoff, then filtered client-side.
+        Pagination lives here rather than in the caller because each media source
+        pages its own way.
+
+        Args:
+            cutoff: Oldest moment to include
+
+        Returns:
+            List of media items added within the window
+
+        Raises:
+            requests.RequestException: On network failures
+            ValueError: On invalid API responses
+            RuntimeError: On unexpected Tautulli errors
+        """
+        cutoff_timestamp = int(cutoff.timestamp())
+        days = max(1, (datetime.now(UTC) - cutoff).days)
+        logger.debug("Filtering items to show only those added after timestamp: %d", cutoff_timestamp)
+
+        initial_count, increment = self._calculate_batch_params(days, override=self.initial_batch_size)
+        current_count = initial_count
+        iteration = 0
+        items: list[MediaItem] = []
+
+        while True:
+            iteration += 1
+
+            if iteration > MAX_FETCH_ITERATIONS:
+                logger.warning(
+                    "Reached max fetch iterations (%d); proceeding with latest batch and date filtering",
+                    MAX_FETCH_ITERATIONS,
+                )
+                break
+
+            logger.debug("Iteration %d: Fetching batch with count=%d", iteration, current_count)
+
+            # Small delay between iterations to avoid hammering the API
+            if iteration > 1:
+                time.sleep(INTER_BATCH_DELAY_SECONDS)
+
+            items_raw: TautulliRecentlyAddedPayload = self.get_recently_added(days=days, count=current_count)
+
+            # Handle both dict (newer API) and list (older API) response formats
+            if isinstance(items_raw, dict) and "recently_added" in items_raw:
+                items = items_raw["recently_added"]
+            elif isinstance(items_raw, list):
+                items = items_raw
+            else:
+                items = []
+
+            if not items:
+                logger.debug("No items returned, stopping iteration")
+                break
+
+            # If we received fewer items than requested, we've hit the API's limit
+            if len(items) < current_count:
+                logger.debug("Received %d items (less than requested %d), reached API limit", len(items), current_count)
+                break
+
+            oldest_timestamp = int(items[-1].get("added_at", 0))
+
+            if oldest_timestamp >= cutoff_timestamp:
+                # Oldest item is still in range - expand the batch
+                next_count = current_count + increment
+                if next_count > MAX_FETCH_COUNT:
+                    logger.warning(
+                        "Reached max fetch count limit (%d); proceeding with current results",
+                        MAX_FETCH_COUNT,
+                    )
+                    break
+                logger.debug(
+                    "Oldest item still in range (iteration %d), fetching more items (next count: %d)",
+                    iteration,
+                    next_count,
+                )
+                current_count = next_count
+            else:
+                # Oldest item is outside the range - we have everything we need
+                logger.debug("Fetched beyond time range after %d iteration(s)", iteration)
+                break
+
+        # Client-side date filter
+        items_before_filter = len(items)
+        items = [item for item in items if int(item.get("added_at", 0)) >= cutoff_timestamp]
+
+        if iteration > 1:
+            logger.info(
+                "Retrieved %d items in %d iterations, filtered to %d items from last %d days",
+                items_before_filter,
+                iteration,
+                len(items),
+                days,
+            )
+        else:
+            logger.info(
+                "Retrieved %d items, filtered to %d items from last %d days",
+                items_before_filter,
+                len(items),
+                days,
+            )
+
+        return items

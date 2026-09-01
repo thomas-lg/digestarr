@@ -10,7 +10,7 @@
 - **Pydantic v2** — config validation (`src/config.py`)
 - **APScheduler** — scheduled execution (`src/scheduler.py`)
 - **discord-webhook** — Discord embed posting (`src/discord_client.py`)
-- **requests** — Tautulli HTTP client (`src/tautulli_client.py`)
+- **requests** — HTTP client for the media sources (`src/tautulli_client.py`, `src/tracearr_client.py`)
 - **Black** — formatter (line length 120)
 - **Ruff** — linter (see `pyproject.toml` for enabled rule sets)
 - **mypy** — type checker (strict optional, `check_untyped_defs`)
@@ -22,7 +22,9 @@
 src/
   app.py               # Entry point, wires scheduler/run-once
   config.py            # Pydantic config model, loaded from config.yml
+  media_source.py      # Backend-neutral contract every source implements
   tautulli_client.py   # Fetches recently added media from Tautulli
+  tracearr_client.py   # Same, from Tracearr: regroups and enriches its raw feed
   discord_client.py    # Builds and sends Discord embeds
   scheduler.py         # APScheduler wrapper
   health_server.py     # Optional GET /health endpoint (scheduled mode only)
