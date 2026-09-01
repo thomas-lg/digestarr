@@ -34,6 +34,16 @@
 # REQUIRED FIELDS
 # -----------------------------------------------------------------------------
 
+# Where recently added media is read from: tautulli (default) or tracearr
+media_source: ${MEDIA_SOURCE}
+
+# Tracearr instance URL and public API token (required when media_source is tracearr)
+# The token is created in Tracearr's UI and looks like trr_pub_...
+# Note: Tracearr cannot report the Plex machine identifier, so set plex_server_id
+# below if you want clickable media links.
+tracearr_url: ${TRACEARR_URL}
+tracearr_api_key: ${TRACEARR_API_KEY}
+
 # Tautulli instance URL
 # Examples: http://localhost:8181, http://tautulli:8181, https://tautulli.example.com
 tautulli_url: ${TAUTULLI_URL}

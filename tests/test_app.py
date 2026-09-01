@@ -8,8 +8,10 @@ from typing import cast
 import pytest
 import requests
 
+import src.app as src_app
 from src.app import (
     _build_discord_payload,
+    _build_media_source,
     _filter_excluded_media_types,
     _format_display_title,
     _get_config_path,
@@ -1206,3 +1208,60 @@ class TestHealthServerStartup:
         # main() reconfigures logging handlers, so the record is asserted on the
         # stream rather than via caplog.
         assert "Could not start health endpoint" in capsys.readouterr().out
+
+
+class TestBuildMediaSource:
+    """Tests for selecting the media source from configuration."""
+
+    @staticmethod
+    def _config(**overrides):
+        base = {
+            "tautulli_url": "http://tautulli:8181",
+            "tautulli_api_key": "secret",
+            "run_once": True,
+        }
+        base.update(overrides)
+        return Config.model_validate(base)
+
+    @pytest.mark.unit
+    def test_defaults_to_tautulli(self):
+        """Unconfigured installs keep reading from Tautulli."""
+        source = _build_media_source(self._config())
+
+        # Asserted against the class src.app itself imported: under PYTHONPATH=src,
+        # src.tautulli_client and tautulli_client are distinct module objects, so
+        # isinstance against the test's own import would always be False.
+        assert isinstance(source, src_app.TautulliClient)
+        assert source.base_url == "http://tautulli:8181"
+
+    @pytest.mark.unit
+    def test_selects_tracearr_when_configured(self):
+        """media_source: tracearr builds the Tracearr client with its own credentials."""
+        source = _build_media_source(
+            self._config(
+                media_source="tracearr",
+                tracearr_url="http://tracearr:3000/",
+                tracearr_api_key="trr_pub_x",
+                plex_server_id="abc",
+            )
+        )
+
+        assert isinstance(source, src_app.TracearrClient)
+        assert source.base_url == "http://tracearr:3000"
+
+    @pytest.mark.unit
+    def test_warns_when_tracearr_has_no_plex_server_id(self, caplog):
+        """
+        Tracearr cannot report the Plex machine identifier, so links silently vanish
+        unless plex_server_id is set. That deserves a warning, not silence.
+        """
+        with caplog.at_level(logging.WARNING):
+            _build_media_source(
+                self._config(
+                    media_source="tracearr",
+                    tracearr_url="http://tracearr:3000",
+                    tracearr_api_key="trr_pub_x",
+                )
+            )
+
+        assert "cannot auto-detect the Plex server id" in caplog.text

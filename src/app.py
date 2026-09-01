@@ -11,6 +11,7 @@ import requests
 
 from config import (
     DEFAULT_CONFIG_PATH,
+    MEDIA_SOURCE_TRACEARR,
     Config,
     get_bootstrap_log_level,
     load_config,
@@ -22,6 +23,7 @@ from logging_config import setup_logging
 from media_source import MediaItem, MediaSourceClient, ServerIdentity
 from scheduler import run_scheduled
 from tautulli_client import TautulliClient
+from tracearr_client import TracearrClient
 
 logger = logging.getLogger("app")
 
@@ -34,6 +36,33 @@ MAX_FETCH_COUNT = 10000
 def _get_config_path() -> str:
     """Resolve config file path from env var override or default container path."""
     return os.getenv("CONFIG_PATH", DEFAULT_CONFIG_PATH)
+
+
+def _build_media_source(config: Config) -> MediaSourceClient:
+    """
+    Build the media source client the configuration selects.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        A client satisfying the MediaSourceClient protocol
+    """
+    if config.media_source == MEDIA_SOURCE_TRACEARR:
+        if not config.plex_server_id:
+            # Tracearr exposes no Plex machine identifier, so the links Discord shows
+            # cannot be built without this being set by hand.
+            logger.warning(
+                "media_source is 'tracearr', which cannot auto-detect the Plex server id; "
+                "set plex_server_id to get clickable media links"
+            )
+        return TracearrClient(base_url=config.tracearr_url, api_key=config.tracearr_api_key)
+
+    return TautulliClient(
+        base_url=config.tautulli_url,
+        api_key=config.tautulli_api_key,
+        initial_batch_size=config.initial_batch_size,
+    )
 
 
 def _format_display_title(item: MediaItem) -> str:
@@ -181,7 +210,7 @@ def _build_discord_payload(items: list[MediaItem]) -> list[DiscordMediaItem]:
 
 def _send_discord_notification(
     config: Config,
-    tautulli: MediaSourceClient,
+    source: MediaSourceClient,
     discord_items: list[DiscordMediaItem],
     days: int,
     total_count: int,
@@ -191,7 +220,7 @@ def _send_discord_notification(
 
     Args:
         config: Application configuration
-        tautulli: Tautulli client used for server identity auto-detection
+        source: Media source client used for server identity auto-detection
         discord_items: Payload built by _build_discord_payload
         days: Days-back value forwarded to the notifier for display
         total_count: Total item count forwarded to the notifier for display
@@ -208,7 +237,7 @@ def _send_discord_notification(
         if not plex_server_id:
             logger.debug("plex_server_id not configured, fetching from Tautulli...")
             try:
-                server_info: ServerIdentity = tautulli.get_server_identity()
+                server_info: ServerIdentity = source.get_server_identity()
                 plex_server_id = server_info.get("machine_identifier")
                 if plex_server_id:
                     logger.info("Auto-detected Plex Server ID: %s", plex_server_id)
@@ -254,15 +283,11 @@ def run_summary(config: Config) -> int:
     """
     logger.info("🚀 Starting Plex summary (last %d days)", config.days_back)
 
-    tautulli = TautulliClient(
-        base_url=config.tautulli_url,
-        api_key=config.tautulli_api_key,
-        initial_batch_size=config.initial_batch_size,
-    )
+    source = _build_media_source(config)
 
     logger.info("Querying recently added items with iterative fetching...")
     try:
-        items = tautulli.get_items_added_since(datetime.now(UTC) - timedelta(days=config.days_back))
+        items = source.get_items_added_since(datetime.now(UTC) - timedelta(days=config.days_back))
     except requests.RequestException as e:
         logger.error("Network error while fetching recently added items: %s", e)
         return 1
@@ -278,7 +303,7 @@ def run_summary(config: Config) -> int:
     discord_items = _build_discord_payload(items)
 
     if config.discord_webhook_url:
-        exit_code = _send_discord_notification(config, tautulli, discord_items, config.days_back, len(items))
+        exit_code = _send_discord_notification(config, source, discord_items, config.days_back, len(items))
     else:
         logger.debug("No Discord webhook URL configured, skipping Discord notification")
         exit_code = 0

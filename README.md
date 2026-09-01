@@ -64,6 +64,7 @@ A lightweight Docker container that fetches recently added media from your Plex 
 - 🎯 Configurable time range (e.g., last 7 days)
 - 💬 **Optional Discord notifications** with rich embed formatting (including friendly "nothing new" updates)
 - 🐳 Docker-ready with minimal footprint
+- 🔌 **Pluggable media source** — read from Tautulli (default) or [Tracearr](https://docs.tracearr.com)
 - 🎛️ **Media type filtering** — exclude types you don't care about (e.g. the music library)
 - 🩺 **Optional HTTP health endpoint** for container liveness probes and external monitors
 - 📊 Clean, formatted output with media type detection
@@ -155,8 +156,11 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 
 | Field                  | Required | Default        | Description                 |
 | ---------------------- | -------- | -------------- | --------------------------- |
-| **`tautulli_url`**     | ✅ Yes   | -              | Tautulli server URL         |
-| **`tautulli_api_key`** | ✅ Yes   | -              | Tautulli API key            |
+| `media_source`         | No       | `tautulli`     | `tautulli` or `tracearr`    |
+| **`tautulli_url`**     | ⚠️\*     | -              | Tautulli server URL         |
+| **`tautulli_api_key`** | ⚠️\*     | -              | Tautulli API key            |
+| `tracearr_url`         | ⚠️\*     | -              | Tracearr URL                |
+| `tracearr_api_key`     | ⚠️\*     | -              | Tracearr public API token   |
 | `days_back`            | No       | `7`            | Days to look back           |
 | `cron_schedule`        | No       | `0 16 * * SUN` | CRON schedule (Sunday 4 PM) |
 | `discord_webhook_url`  | No       | None           | Discord webhook (optional)  |
@@ -165,6 +169,8 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 | `excluded_media_types` | No       | `[]`           | Media types to omit         |
 | `enable_healthcheck`   | No       | `false`        | Serve `GET /health`         |
 | Other fields           | No       | See docs       | See full reference          |
+
+\* Only the selected `media_source`'s credentials are required.
 
 > **📖 For complete configuration documentation**, including configuration methods, Docker secrets, all fields, troubleshooting, and examples, see **[CONFIGURATION.md](CONFIGURATION.md)**
 
@@ -273,7 +279,9 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   ├── health_server.py # HTTP health endpoint
 │   ├── logging_config.py # Logging configuration
 │   ├── scheduler.py # APScheduler daemon mode
-│   └── tautulli_client.py # Tautulli API client
+│   ├── media_source.py # Backend-neutral media source contract
+│   ├── tautulli_client.py # Tautulli API client
+│   └── tracearr_client.py # Tracearr API client
 ├── tests/ # Test suite
 │   ├── test_app.py # App logic tests
 │   ├── test_config.py # Configuration tests
@@ -284,7 +292,8 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   ├── test_integration.py # Integration tests
 │   ├── test_logging_config.py # Logging config tests
 │   ├── test_scheduler.py # Scheduler tests
-│   └── test_tautulli_client.py # Tautulli client tests
+│   ├── test_tautulli_client.py # Tautulli client tests
+│   └── test_tracearr_client.py # Tracearr client tests
 ├── scripts/ # Helper scripts
 │   ├── clean.sh # Clean up caches
 │   ├── compile-deps.sh # Regenerate lockfiles from requirements files
