@@ -19,6 +19,7 @@ class DiscordMediaItem(TypedDict):
     title: str
     added_at: NotRequired[str]
     rating_key: NotRequired[int | str]
+    server_type: NotRequired[str]
 
 
 logger = logging.getLogger(__name__)
@@ -105,18 +106,25 @@ class DiscordNotifier:
         "No new content in {days} {day_word}. Friendly reminder: your watchlist won’t fill itself 😄",
     ]
 
-    def __init__(self, webhook_url: str, plex_url: str | None = None, plex_server_id: str | None = None):
+    def __init__(
+        self,
+        webhook_url: str,
+        media_server_url: str | None = None,
+        media_server_id: str | None = None,
+    ):
         """
         Initialize Discord notifier.
 
         Args:
             webhook_url: Discord webhook URL for the target channel
-            plex_url: Optional Plex server URL (e.g., 'https://app.plex.tv' or 'http://plex:32400')
-            plex_server_id: Optional Plex server machine identifier for creating direct links
+            media_server_url: Optional media server URL used to build deep links
+                (e.g. 'https://app.plex.tv', 'http://plex:32400', 'http://jellyfin:8096')
+            media_server_id: Optional server identifier. Required for Plex links,
+                optional for Jellyfin and Emby.
         """
         self.webhook_url = webhook_url
-        self.plex_url = plex_url.rstrip("/") if plex_url else None
-        self.plex_server_id = plex_server_id
+        self.media_server_url = media_server_url.rstrip("/") if media_server_url else None
+        self.media_server_id = media_server_id
 
     def send_summary(self, media_items: list[DiscordMediaItem], days_back: int, total_count: int) -> bool:
         """
@@ -520,6 +528,40 @@ class DiscordNotifier:
 
         return grouped
 
+    def _build_deep_link(self, server_type: str, rating_key: int | str) -> str | None:
+        """
+        Build a link back to the item on its media server.
+
+        Each server addresses an item differently, and Plex is the only one that needs
+        a server identifier in the URL — Jellyfin and Emby accept an optional
+        ``serverId`` that current versions do without, and Tracearr does not expose one
+        anyway.
+
+        Args:
+            server_type: "plex", "jellyfin" or "emby"
+            rating_key: The item's identifier on that server
+
+        Returns:
+            A URL, or None when the configuration cannot produce one
+        """
+        if not self.media_server_url:
+            return None
+
+        if server_type in ("jellyfin", "emby"):
+            # Jellyfin routes to #/details, Emby to #!/item; both take the raw item id.
+            path = "details" if server_type == "jellyfin" else "item"
+            separator = "#/" if server_type == "jellyfin" else "#!/"
+            link = f"{self.media_server_url}/web/index.html{separator}{path}?id={rating_key}"
+            return f"{link}&serverId={self.media_server_id}" if self.media_server_id else link
+
+        # Plex addresses items by library path and always needs the server id.
+        if not self.media_server_id:
+            return None
+        encoded_key = f"%2Flibrary%2Fmetadata%2F{rating_key}"
+        if "plex.tv" in self.media_server_url.lower():
+            return f"{self.media_server_url}/desktop#!/server/{self.media_server_id}/details?key={encoded_key}"
+        return f"{self.media_server_url}/web/index.html#!/server/{self.media_server_id}/details?key={encoded_key}"
+
     def _format_media_item(self, item: DiscordMediaItem) -> str:
         """Format a single media item for display."""
         title = item.get("title", "Unknown")
@@ -528,22 +570,9 @@ class DiscordNotifier:
         # Escape only markdown characters that would alter the visible title
         safe_title = _escape_title_markdown(title)
 
-        # Create clickable link to Plex if URL and server ID are available
-        if self.plex_url and self.plex_server_id and rating_key:
-            # URL encode the library path
-            encoded_key = f"%2Flibrary%2Fmetadata%2F{rating_key}"
-
-            # Check if using Plex.tv or local Plex server
-            if "plex.tv" in self.plex_url.lower():
-                # Plex.tv format
-                link_url = f"{self.plex_url}/desktop#!/server/{self.plex_server_id}/details?key={encoded_key}"
-            else:
-                # Local Plex server format
-                link_url = f"{self.plex_url}/web/index.html#!/server/{self.plex_server_id}/details?key={encoded_key}"
-
-            display_title = f"[{safe_title}]({link_url})"
-        else:
-            display_title = f"**{safe_title}**"
+        # A source that only ever sees Plex reports no type, so Plex is the default.
+        link_url = self._build_deep_link(item.get("server_type", "plex"), rating_key) if rating_key else None
+        display_title = f"[{safe_title}]({link_url})" if link_url else f"**{safe_title}**"
 
         # Format based on type (year already included in title from app.py)
         return f"• {display_title}"

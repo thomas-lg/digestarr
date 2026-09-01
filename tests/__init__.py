@@ -1,1 +1,1 @@
-"""Test suite for plex-releases-summary."""
+"""Test suite for digestarr."""

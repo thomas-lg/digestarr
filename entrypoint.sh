@@ -2,7 +2,7 @@
 set -e
 
 # =============================================================================
-# Docker Entrypoint Script for Plex Releases Summary
+# Docker Entrypoint Script for Digestarr
 # =============================================================================
 # Handles PUID/PGID permissions and auto-creates config.yml from template.
 # =============================================================================
@@ -45,7 +45,7 @@ PGID=${PGID:-100}
 
 validate_id "$PUID" "PUID"
 validate_id "$PGID" "PGID"
-echo "Plex Releases Summary - starting"
+echo "Digestarr - starting"
 echo "Running with PUID=$PUID, PGID=$PGID"
 
 # Adjust appuser to match PUID/PGID

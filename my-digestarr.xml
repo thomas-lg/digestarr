@@ -1,29 +1,29 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>plex-releases-summary</Name>
-  <Repository>ghcr.io/thomas-lg/plex-releases-summary:latest</Repository>
-  <Registry>https://github.com/thomas-lg/plex-releases-summary/pkgs/container/plex-releases-summary</Registry>
+  <Name>digestarr</Name>
+  <Repository>ghcr.io/thomas-lg/digestarr:latest</Repository>
+  <Registry>https://github.com/thomas-lg/digestarr/pkgs/container/digestarr</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/thomas-lg/plex-releases-summary</Support>
-  <Project>https://github.com/thomas-lg/plex-releases-summary</Project>
-  <ReadMe>https://github.com/thomas-lg/plex-releases-summary/blob/main/README.md</ReadMe>
-  <Overview>A lightweight container that fetches recently added media from your Plex server via Tautulli and sends summaries to Discord. Minimal configuration required - just 2 fields (Tautulli URL and API key). Smart defaults: checks last 7 days, runs weekly on Sundays at 4 PM. Supports scheduled (daemon) or one-shot mode. Discord notifications optional. For complete documentation, see https://github.com/thomas-lg/plex-releases-summary/blob/main/README.md - For configuration guide, see https://github.com/thomas-lg/plex-releases-summary/blob/main/CONFIGURATION.md</Overview>
+  <Support>https://github.com/thomas-lg/digestarr</Support>
+  <Project>https://github.com/thomas-lg/digestarr</Project>
+  <ReadMe>https://github.com/thomas-lg/digestarr/blob/main/README.md</ReadMe>
+  <Overview>A lightweight container that fetches recently added media from your Plex server via Tautulli and sends summaries to Discord. Minimal configuration required - just 2 fields (Tautulli URL and API key). Smart defaults: checks last 7 days, runs weekly on Sundays at 4 PM. Supports scheduled (daemon) or one-shot mode. Discord notifications optional. For complete documentation, see https://github.com/thomas-lg/digestarr/blob/main/README.md - For configuration guide, see https://github.com/thomas-lg/digestarr/blob/main/CONFIGURATION.md</Overview>
   <Category>MediaServer:Video Tools:Utilities</Category>
   <WebUI/>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/thomas-lg/plex-releases-summary/main/assets/plex_releases_summary.png</Icon>
+  <Icon>https://raw.githubusercontent.com/thomas-lg/digestarr/main/assets/digestarr.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
   <DateInstalled>1771059298</DateInstalled>
   <DonateText/>
   <DonateLink/>
-  <Requires>Minimal setup: Tautulli v2.1.0+ running and accessible with API enabled. On first run, config.yml is auto-created from template with environment variable references. Just set the required variables below (Tautulli URL and API key). For advanced configuration options and troubleshooting, see https://github.com/thomas-lg/plex-releases-summary/blob/main/CONFIGURATION.md</Requires>
-  <Config Name="AppData Config Path" Target="/app/configs" Default="/mnt/user/appdata/plex-releases-summary" Mode="rw" Description="Host path for config files. Container target is fixed to /app/configs (do not change). On first run, config.yml is auto-created." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/plex-releases-summary</Config>
-  <Config Name="AppData Logs Path" Target="/app/logs" Default="/mnt/user/appdata/plex-releases-summary/logs" Mode="rw" Description="Host path for persistent logs. Container target is fixed to /app/logs (do not change)." Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/plex-releases-summary/logs</Config>
+  <Requires>Minimal setup: Tautulli v2.1.0+ running and accessible with API enabled. On first run, config.yml is auto-created from template with environment variable references. Just set the required variables below (Tautulli URL and API key). For advanced configuration options and troubleshooting, see https://github.com/thomas-lg/digestarr/blob/main/CONFIGURATION.md</Requires>
+  <Config Name="AppData Config Path" Target="/app/configs" Default="/mnt/user/appdata/digestarr" Mode="rw" Description="Host path for config files. Container target is fixed to /app/configs (do not change). On first run, config.yml is auto-created." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/digestarr</Config>
+  <Config Name="AppData Logs Path" Target="/app/logs" Default="/mnt/user/appdata/digestarr/logs" Mode="rw" Description="Host path for persistent logs. Container target is fixed to /app/logs (do not change)." Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/digestarr/logs</Config>
   <Config Name="Tautulli URL" Target="TAUTULLI_URL" Default="http://tautulli:8181" Mode="" Description="Tautulli server URL (required). Example: http://tautulli:8181 or http://192.168.1.100:8181" Type="Variable" Display="always" Required="true" Mask="false">http://tautulli:8181</Config>
   <Config Name="Tautulli API Key" Target="TAUTULLI_API_KEY" Default="" Mode="" Description="Tautulli API key (required). Find in Tautulli: Settings → Web Interface → API. Can be direct value or file path (e.g., /run/secrets/tautulli_api_key)." Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="Discord Webhook URL" Target="DISCORD_WEBHOOK_URL" Default="" Mode="" Description="Optional: Discord webhook URL or file path. Leave empty to disable notifications (default)." Type="Variable" Display="always" Required="false" Mask="false"/>
@@ -31,12 +31,12 @@
   <Config Name="CRON Schedule" Target="CRON_SCHEDULE" Default="" Mode="" Description="Optional: CRON schedule (default: '0 16 * * SUN' = Sunday 4 PM). Runs in container timezone (set TZ variable to change from UTC). Use crontab.guru for help." Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Days Back" Target="DAYS_BACK" Default="" Mode="" Description="Optional: Days to look back for releases (default: 7)." Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Initial Batch Size" Target="INITIAL_BATCH_SIZE" Default="" Mode="" Description="Optional: Override adaptive batch size for Tautulli API (1-10000). Leave empty for automatic sizing based on days_back." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="Plex URL" Target="PLEX_URL" Default="" Mode="" Description="Optional: Plex server URL for generating media links (default: https://app.plex.tv)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Media Server URL" Target="MEDIA_SERVER_URL" Default="" Mode="" Description="Optional: Plex server URL for generating media links (default: https://app.plex.tv)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Description="Optional: Timezone for CRON schedule (default: UTC). Examples: America/New_York, Europe/Paris, Asia/Tokyo. See https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
   <Config Name="Log Level" Target="LOG_LEVEL" Default="" Mode="" Description="Optional: Logging level - DEBUG, INFO, WARNING, ERROR (default: INFO)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Media Source" Target="MEDIA_SOURCE" Default="" Mode="" Description="Optional: where recently added media is read from - tautulli (default) or tracearr." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Tracearr URL" Target="TRACEARR_URL" Default="" Mode="" Description="Required when Media Source is tracearr: full URL to your Tracearr instance, e.g. http://tracearr:3000." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="Tracearr API Key" Target="TRACEARR_API_KEY" Default="" Mode="" Description="Required when Media Source is tracearr: a trr_pub_ token created in Tracearr. Can point at a secret file, e.g. /run/secrets/tracearr_api_key. Note: Tracearr cannot report the Plex machine identifier, so set Plex Server ID for clickable links." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Tracearr API Key" Target="TRACEARR_API_KEY" Default="" Mode="" Description="Required when Media Source is tracearr: a trr_pub_ token created in Tracearr. Can point at a secret file, e.g. /run/secrets/tracearr_api_key. Note: Tracearr cannot report the Plex machine identifier, so set Media Server ID for clickable links." Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="Excluded Media Types" Target="EXCLUDED_MEDIA_TYPES" Default="" Mode="" Description="Optional: Comma-separated media types to omit from the summary - movie, show, season, episode, album, track. Example: track,album to skip the music library. Leave empty to include everything." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Enable Health Endpoint" Target="ENABLE_HEALTHCHECK" Default="" Mode="" Description="Optional: Serve GET /health for container liveness probes (default: false). Scheduled mode only. Set to true if you want an external monitor such as Uptime Kuma to poll it." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Health Endpoint Bind Address" Target="HEALTH_HOST" Default="" Mode="" Description="Optional: Interface the health endpoint binds to (default: 127.0.0.1, reachable only inside the container). Set to 0.0.0.0 to let an external monitor reach it - the endpoint is unauthenticated." Type="Variable" Display="advanced" Required="false" Mask="false"/>

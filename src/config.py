@@ -19,8 +19,8 @@ class ConfigInput(TypedDict, total=False):
     days_back: int
     cron_schedule: str | None
     discord_webhook_url: str | None
-    plex_url: str
-    plex_server_id: str | None
+    media_server_url: str
+    media_server_id: str | None
     run_once: bool
     log_level: str
     initial_batch_size: int | None
@@ -269,8 +269,14 @@ class Config(BaseModel):
     discord_webhook_url: str | None = Field(None, description="Discord webhook URL for notifications")
 
     # Plex Configuration (Optional)
-    plex_url: str = Field("https://app.plex.tv", description="Plex server URL for media links")
-    plex_server_id: str | None = Field(None, description="Plex server machine identifier (auto-detected if not set)")
+    media_server_url: str = Field(
+        "https://app.plex.tv",
+        description="Media server URL used to build deep links (Plex, Jellyfin or Emby)",
+    )
+    media_server_id: str | None = Field(
+        None,
+        description="Media server identifier; required for Plex links, optional for Jellyfin and Emby",
+    )
 
     # Execution Mode (Optional)
     run_once: bool = Field(False, description="Set to true for one-shot execution instead of scheduled")

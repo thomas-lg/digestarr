@@ -21,7 +21,7 @@ A clear and concise description of any alternative solutions or features you've 
 
 **Environment (if relevant)**
 
-- Plex Releases Summary version / image tag: [e.g. `latest`, `v1.2.3`]
+- Digestarr version / image tag: [e.g. `latest`, `v1.2.3`]
 - Tautulli version: [e.g. `v2.14.0`]
 - Deployment method: [e.g. Docker Compose, Unraid]
 

@@ -1,10 +1,10 @@
-# Contributing to Plex Releases Summary
+# Contributing to Digestarr
 
-Thank you for contributing to Plex Releases Summary.
+Thank you for contributing to Digestarr.
 
 ## Table of Contents
 
-- [Contributing to Plex Releases Summary](#contributing-to-plex-releases-summary)
+- [Contributing to Digestarr](#contributing-to-digestarr)
   - [Table of Contents](#table-of-contents)
   - [Branching Strategy](#branching-strategy)
   - [Getting Started](#getting-started)
@@ -205,7 +205,7 @@ This repository uses two separate workflows for CI/CD and release management:
 - Release drafter: `.github/workflows/draft-release.yml` (draft release notes on push to `main`; publish via `workflow_dispatch`)
 - Deployment example: `docker-compose.yml`
 
-The pipeline gates Docker image publishing on passing quality and test checks. Images are published to `ghcr.io/thomas-lg/plex-releases-summary` with the following tags:
+The pipeline gates Docker image publishing on passing quality and test checks. Images are published to `ghcr.io/thomas-lg/digestarr` with the following tags:
 
 | Tag | When |
 | --- | --- |

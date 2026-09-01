@@ -49,6 +49,7 @@ class TracearrLibraryItem(BaseModel):
     media_type: str
     title: str
     added_at: str
+    server_type: str | None = None
     year: int | None = None
     media_id: str | None = None
     rating_key: str | None = None
@@ -172,7 +173,7 @@ class TracearrClient:
 
         Always empty: Tracearr records the Plex ``machineIdentifier`` but exposes it
         only on its internal authenticated API, not the public surface. Deep links
-        therefore need ``plex_server_id`` to be configured explicitly.
+        therefore need ``media_server_id`` to be configured explicitly.
         """
         logger.debug("Tracearr does not expose the Plex machine identifier; skipping auto-detection")
         return {}
@@ -336,6 +337,8 @@ class TracearrClient:
             "title": row.title,
             "added_at": int(_parse_iso(row.added_at).timestamp()),
         }
+        if row.server_type:
+            item["server_type"] = row.server_type
         if row.year is not None:
             item["year"] = row.year
         if row.rating_key:
@@ -360,6 +363,7 @@ class TracearrClient:
                 show_key=row.parent_rating_key,
                 season_key=row.rating_key,
                 fallback_title=row.title,
+                server_type=row.server_type,
             )
         return self._to_media_item(row)
 
@@ -417,6 +421,7 @@ class TracearrClient:
         show_key: str | None,
         season_key: str | None,
         fallback_title: str,
+        server_type: str | None = None,
         fallback_episode: TracearrLibraryItem | None = None,
     ) -> MediaItem:
         """
@@ -439,6 +444,8 @@ class TracearrClient:
             "parent_title": show.get("title") or "Unknown Show",
             "added_at": int(_parse_iso(added_at).timestamp()),
         }
+        if server_type:
+            item["server_type"] = server_type
         if season_number is not None:
             item["media_index"] = season_number
         if season_key:
@@ -524,6 +531,8 @@ class TracearrClient:
             "title": show.get("title") or episode.title,
             "added_at": int(_parse_iso(episode.added_at).timestamp()),
         }
+        if episode.server_type:
+            item["server_type"] = episode.server_type
         if show.get("year") is not None:
             item["year"] = show["year"]
         # Always set: a show entry only arises from a burst spanning several seasons,
@@ -539,6 +548,7 @@ class TracearrClient:
             show_key=episode.grandparent_rating_key,
             season_key=episode.parent_rating_key,
             fallback_title=episode.title,
+            server_type=episode.server_type,
             fallback_episode=episode,
         )
 

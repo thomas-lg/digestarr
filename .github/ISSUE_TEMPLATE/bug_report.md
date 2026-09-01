@@ -25,7 +25,7 @@ A clear and concise description of what you expected to happen.
 
 **Environment**
 
-- Plex Releases Summary version / image tag: [e.g. `latest`, `v1.2.3`]
+- Digestarr version / image tag: [e.g. `latest`, `v1.2.3`]
 - Tautulli version: [e.g. `v2.14.0`]
 - Deployment method: [e.g. Docker Compose, Unraid]
 - Host OS / architecture: [e.g. Ubuntu 22.04, `linux/arm64`]
