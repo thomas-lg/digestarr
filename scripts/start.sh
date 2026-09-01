@@ -77,7 +77,7 @@ if grep -q '\${TAUTULLI_API_KEY}' "$CONFIG_FILE" && [ -z "${TAUTULLI_API_KEY:-}"
     exit 1
 fi
 
-echo "🚀 Starting Plex Releases Summary"
+echo "🚀 Starting Digestarr"
 echo "   Config: $CONFIG_FILE"
 
 if command -v python >/dev/null 2>&1; then

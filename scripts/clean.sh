@@ -5,7 +5,7 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-echo "🧹 Cleaning up Plex Releases Summary..."
+echo "🧹 Cleaning up Digestarr..."
 echo ""
 
 # Ask for confirmation

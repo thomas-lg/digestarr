@@ -14,8 +14,8 @@ class TestDiscordNotifier:
         """Create a DiscordNotifier instance for testing."""
         return DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="https://app.plex.tv",
-            plex_server_id="test-server-id",
+            media_server_url="https://app.plex.tv",
+            media_server_id="test-server-id",
         )
 
     @pytest.mark.unit
@@ -171,7 +171,9 @@ class TestDiscordNotifier:
     def test_format_media_item_without_server_id(self):
         """Test formatting media item without server ID."""
         notifier = DiscordNotifier(
-            webhook_url="https://discord.com/api/webhooks/test", plex_url="https://app.plex.tv", plex_server_id=None
+            webhook_url="https://discord.com/api/webhooks/test",
+            media_server_url="https://app.plex.tv",
+            media_server_id=None,
         )
         item: DiscordMediaItem = {"type": "movie", "rating_key": "12345", "title": "Test Movie"}
         formatted = notifier._format_media_item(item)
@@ -475,8 +477,8 @@ class TestFormatMediaItemLocalUrl:
         """Local plex URL should produce /web/index.html#!/server/... link format."""
         notifier = DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="http://192.168.1.100:32400",
-            plex_server_id="srv-abc",
+            media_server_url="http://192.168.1.100:32400",
+            media_server_id="srv-abc",
         )
         item: DiscordMediaItem = {"type": "movie", "rating_key": 99, "title": "Local Movie"}
         formatted = notifier._format_media_item(item)
@@ -490,8 +492,8 @@ class TestFormatMediaItemLocalUrl:
         """plex.tv URL should produce /desktop#!/server/... link format."""
         notifier = DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="https://app.plex.tv",
-            plex_server_id="srv-xyz",
+            media_server_url="https://app.plex.tv",
+            media_server_id="srv-xyz",
         )
         item: DiscordMediaItem = {"type": "movie", "rating_key": 1, "title": "Cloud Movie"}
         formatted = notifier._format_media_item(item)
@@ -758,8 +760,8 @@ class TestSendSummaryOuterExceptions:
     def notifier(self):
         return DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="https://app.plex.tv",
-            plex_server_id="srv",
+            media_server_url="https://app.plex.tv",
+            media_server_id="srv",
         )
 
     @pytest.mark.unit
@@ -794,8 +796,8 @@ class TestSendSummaryMultiPart:
     def notifier(self):
         return DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="https://app.plex.tv",
-            plex_server_id="srv",
+            media_server_url="https://app.plex.tv",
+            media_server_id="srv",
         )
 
     @pytest.mark.unit
@@ -844,8 +846,8 @@ class TestSendSummaryWithItems:
     def notifier(self):
         return DiscordNotifier(
             webhook_url="https://discord.com/api/webhooks/test",
-            plex_url="https://app.plex.tv",
-            plex_server_id="srv-id",
+            media_server_url="https://app.plex.tv",
+            media_server_id="srv-id",
         )
 
     @pytest.mark.unit
@@ -1069,3 +1071,91 @@ class TestSendSummaryWithItems:
         result = notifier.send_summary(items, days_back=7, total_count=2)
         assert result is False
         assert any("Partial Discord send" in r.message for r in caplog.records)
+
+
+class TestDeepLinksPerServerType:
+    """
+    Deep links differ per media server.
+
+    The Plex shapes are verified against a live library; the Jellyfin and Emby ones come
+    from their documented URL formats and have not been checked against a real server.
+    """
+
+    @pytest.mark.unit
+    def test_plex_cloud_link_is_unchanged(self):
+        """The app.plex.tv shape must not drift — this is the one in production use."""
+        notifier = DiscordNotifier("https://discord.example/x", "https://app.plex.tv", "srv-1")
+
+        link = notifier._build_deep_link("plex", 3007)
+
+        assert link == "https://app.plex.tv/desktop#!/server/srv-1/details?key=%2Flibrary%2Fmetadata%2F3007"
+
+    @pytest.mark.unit
+    def test_self_hosted_plex_link_is_unchanged(self):
+        """A local Plex uses /web/index.html but the same key format."""
+        notifier = DiscordNotifier("https://discord.example/x", "http://plex:32400", "srv-1")
+
+        link = notifier._build_deep_link("plex", 3007)
+
+        assert link == "http://plex:32400/web/index.html#!/server/srv-1/details?key=%2Flibrary%2Fmetadata%2F3007"
+
+    @pytest.mark.unit
+    def test_jellyfin_link_uses_the_raw_item_id(self):
+        """Jellyfin addresses items by id under #/details, not by library path."""
+        notifier = DiscordNotifier("https://discord.example/x", "http://jellyfin:8096", "srv-1")
+
+        link = notifier._build_deep_link("jellyfin", "abc123")
+
+        assert link == "http://jellyfin:8096/web/index.html#/details?id=abc123&serverId=srv-1"
+
+    @pytest.mark.unit
+    def test_jellyfin_link_works_without_a_server_id(self):
+        """serverId is optional on current Jellyfin, and no source reports one."""
+        notifier = DiscordNotifier("https://discord.example/x", "http://jellyfin:8096")
+
+        link = notifier._build_deep_link("jellyfin", "abc123")
+
+        assert link == "http://jellyfin:8096/web/index.html#/details?id=abc123"
+
+    @pytest.mark.unit
+    def test_emby_link_uses_its_own_route(self):
+        """Emby routes to #!/item where Jellyfin uses #/details."""
+        notifier = DiscordNotifier("https://discord.example/x", "http://emby:8096")
+
+        link = notifier._build_deep_link("emby", "abc123")
+
+        assert link == "http://emby:8096/web/index.html#!/item?id=abc123"
+
+    @pytest.mark.unit
+    def test_plex_without_a_server_id_yields_no_link(self):
+        """Plex cannot be addressed without the server identifier, so no broken URL."""
+        notifier = DiscordNotifier("https://discord.example/x", "https://app.plex.tv")
+
+        assert notifier._build_deep_link("plex", 3007) is None
+
+    @pytest.mark.unit
+    def test_no_server_url_yields_no_link(self):
+        """Nothing to link to."""
+        notifier = DiscordNotifier("https://discord.example/x", None, "srv-1")
+
+        assert notifier._build_deep_link("jellyfin", "abc123") is None
+
+    @pytest.mark.unit
+    def test_item_without_a_server_type_is_treated_as_plex(self):
+        """Tautulli only ever sees Plex and reports no type, so Plex is the default."""
+        notifier = DiscordNotifier("https://discord.example/x", "https://app.plex.tv", "srv-1")
+
+        rendered = notifier._format_media_item({"type": "movie", "title": "Inception", "rating_key": 42})
+
+        assert "https://app.plex.tv/desktop#!/server/srv-1/details?key=%2Flibrary%2Fmetadata%2F42" in rendered
+
+    @pytest.mark.unit
+    def test_jellyfin_item_renders_a_jellyfin_link(self):
+        """The type carried on the payload picks the shape."""
+        notifier = DiscordNotifier("https://discord.example/x", "http://jellyfin:8096")
+
+        rendered = notifier._format_media_item(
+            {"type": "movie", "title": "Inception", "rating_key": "abc123", "server_type": "jellyfin"}
+        )
+
+        assert "http://jellyfin:8096/web/index.html#/details?id=abc123" in rendered

@@ -7,25 +7,25 @@
 annotated-types==0.7.0
     # via pydantic
 apscheduler==3.11.2
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 certifi==2026.1.4
     # via requests
 charset-normalizer==3.4.4
     # via requests
 discord-webhook==1.4.1
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 idna==3.11
     # via requests
 pydantic==2.12.5
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 pydantic-core==2.41.5
     # via pydantic
 pyyaml==6.0.3
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 requests==2.34.2
     # via
+    #   digestarr (pyproject.toml)
     #   discord-webhook
-    #   plex-releases-summary (pyproject.toml)
 typing-extensions==4.15.0
     # via
     #   pydantic

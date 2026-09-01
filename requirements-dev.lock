@@ -7,7 +7,7 @@
 annotated-types==0.7.0
     # via pydantic
 apscheduler==3.11.2
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 black==26.5.1
     # via -r requirements-dev.txt
 build==1.4.0
@@ -23,7 +23,7 @@ click==8.3.1
 coverage==7.13.4
     # via pytest-cov
 discord-webhook==1.4.1
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 idna==3.11
     # via requests
 iniconfig==2.3.0
@@ -57,7 +57,7 @@ pluggy==1.6.0
     #   pytest
     #   pytest-cov
 pydantic==2.12.5
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 pydantic-core==2.41.5
     # via pydantic
 pygments==2.19.2
@@ -78,11 +78,11 @@ pytest-mock==3.15.1
 pytokens==0.4.1
     # via black
 pyyaml==6.0.3
-    # via plex-releases-summary (pyproject.toml)
+    # via digestarr (pyproject.toml)
 requests==2.34.2
     # via
+    #   digestarr (pyproject.toml)
     #   discord-webhook
-    #   plex-releases-summary (pyproject.toml)
 ruff==0.15.2
     # via -r requirements-dev.txt
 setuptools-scm==10.2.1

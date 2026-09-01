@@ -17,7 +17,7 @@ jobs:
               uses: snok/container-retention-policy@v3.1.0
               with:
                   account: user
-                  image-names: plex-releases-summary
+                  image-names: digestarr
                   cut-off: 30d
                   keep-n-most-recent: 10
                   tag-selection: tagged
@@ -28,7 +28,7 @@ jobs:
               uses: snok/container-retention-policy@v3.1.0
               with:
                   account: user
-                  image-names: plex-releases-summary
+                  image-names: digestarr
                   cut-off: 7d
                   tag-selection: untagged
                   token: ${{ secrets.GITHUB_TOKEN }}

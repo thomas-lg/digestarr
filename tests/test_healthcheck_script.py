@@ -121,9 +121,9 @@ class TestMainIsQuiet:
             "tautulli_api_key: key\n"
             "run_once: true\n"
             # defined-but-empty optional field: load_config logs a WARNING for this
-            "days_back: ${PRS_TEST_EMPTY_VAR}\n"
+            "days_back: ${DIGESTARR_TEST_EMPTY_VAR}\n"
         )
-        monkeypatch.setenv("PRS_TEST_EMPTY_VAR", "")
+        monkeypatch.setenv("DIGESTARR_TEST_EMPTY_VAR", "")
         monkeypatch.setenv("CONFIG_PATH", str(config_file))
 
         script = _load_script()

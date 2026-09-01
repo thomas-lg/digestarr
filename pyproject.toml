@@ -8,7 +8,7 @@ local_scheme = "no-local-version"
 fallback_version = "0.0.0"
 
 [project]
-name = "plex-releases-summary"
+name = "digestarr"
 dynamic = ["version"]
 description = "Fetches recently added Plex media via Tautulli and posts Discord summaries"
 readme = "README.md"

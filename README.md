@@ -1,34 +1,34 @@
-# Plex Releases Summary
+# Digestarr
 
 <p align="center">
-  <img src="assets/plex_releases_summary.png" alt="Plex Releases Summary logo" width="180"/>
+  <img src="assets/digestarr.png" alt="Digestarr logo" width="180"/>
 </p>
 
 <p align="center">
   <!-- Build & Distribution -->
-  <a href="https://github.com/thomas-lg/plex-releases-summary/actions/workflows/ci.yml"><img src="https://github.com/thomas-lg/plex-releases-summary/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://github.com/thomas-lg/plex-releases-summary/releases/latest"><img src="https://img.shields.io/github/v/release/thomas-lg/plex-releases-summary?logo=github&logoColor=white&color=blue" alt="Latest Release"/></a>
-  <a href="https://ghcr.io/thomas-lg/plex-releases-summary"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker Image"/></a>
+  <a href="https://github.com/thomas-lg/digestarr/actions/workflows/ci.yml"><img src="https://github.com/thomas-lg/digestarr/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/thomas-lg/digestarr/releases/latest"><img src="https://img.shields.io/github/v/release/thomas-lg/digestarr?logo=github&logoColor=white&color=blue" alt="Latest Release"/></a>
+  <a href="https://ghcr.io/thomas-lg/digestarr"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker Image"/></a>
   <!-- Code Quality -->
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fthomas-lg%2Fplex-releases-summary%2Fmain%2Fpyproject.toml&query=%24.project.requires-python&label=python&logo=python&logoColor=white&color=3776ab" alt="Python Version"/></a>
-  <a href="https://codecov.io/gh/thomas-lg/plex-releases-summary"><img src="https://codecov.io/gh/thomas-lg/plex-releases-summary/branch/main/graph/badge.svg" alt="Coverage"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fthomas-lg%2Fdigestarr%2Fmain%2Fpyproject.toml&query=%24.project.requires-python&label=python&logo=python&logoColor=white&color=3776ab" alt="Python Version"/></a>
+  <a href="https://codecov.io/gh/thomas-lg/digestarr"><img src="https://codecov.io/gh/thomas-lg/digestarr/branch/main/graph/badge.svg" alt="Coverage"/></a>
   <a href="https://docs.pydantic.dev/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/pydantic/pydantic/main/docs/badge/v2.json" alt="Pydantic v2"/></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"/></a>
   <a href="https://mypy-lang.org/"><img src="https://www.mypy-lang.org/static/mypy_badge.svg" alt="Checked with mypy"/></a>
   <!-- Security & Maintenance -->
-  <a href="https://github.com/thomas-lg/plex-releases-summary/security"><img src="https://img.shields.io/badge/security-trivy-1904DA?logo=aquasecurity&logoColor=white" alt="Security: Trivy"/></a>
-  <a href="https://github.com/thomas-lg/plex-releases-summary/network/updates"><img src="https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white" alt="Dependabot"/></a>
+  <a href="https://github.com/thomas-lg/digestarr/security"><img src="https://img.shields.io/badge/security-trivy-1904DA?logo=aquasecurity&logoColor=white" alt="Security: Trivy"/></a>
+  <a href="https://github.com/thomas-lg/digestarr/network/updates"><img src="https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white" alt="Dependabot"/></a>
   <!-- License -->
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen?logo=opensourceinitiative&logoColor=white" alt="License: MIT"/></a>
 </p>
 
-A lightweight Docker container that fetches recently added media from your Plex server via Tautulli and sends summaries to Discord. Perfect for automated weekly notifications of new movies, TV shows, and music added to your media library.
+A lightweight Docker container that digests what was recently added to your media library and posts a summary to Discord. Reads from [Tracearr](https://docs.tracearr.com) (Plex, Jellyfin or Emby) or from [Tautulli](https://tautulli.com/) (Plex only). Perfect for automated weekly notifications of new movies, TV shows and music.
 
 > **🚀 Unraid Users:** Jump to [Unraid Quick Start](#unraid-quick-start) - just download the XML template and configure 2 settings!
 
 ## Table of Contents
 
-- [Plex Releases Summary](#plex-releases-summary)
+- [Digestarr](#digestarr)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
   - [Prerequisites](#prerequisites)
@@ -72,9 +72,15 @@ A lightweight Docker container that fetches recently added media from your Plex 
 
 ## Prerequisites
 
-- [Tautulli](https://tautulli.com/) v2.1.0+ with API enabled
-- Tautulli API key (Settings → Web Interface → API)
-- Docker or Docker Compose
+Docker or Docker Compose, plus **one** media source:
+
+| Source | Media servers | Notes |
+| --- | --- | --- |
+| **[Tracearr](https://docs.tracearr.com)** *(recommended)* | Plex, Jellyfin, Emby | Where new features go. Needs its own stack (TimescaleDB + Redis). Create a `trr_pub_…` token in its UI. |
+| [Tautulli](https://tautulli.com/) v2.1.0+ | Plex only | Maintenance mode: fixes yes, new features no. No extra infrastructure, and the only source that auto-detects the Plex server id. |
+
+Tautulli remains the default so existing installs keep working untouched; see
+[Choosing a media source](CONFIGURATION.md#choosing-a-media-source).
 
 > **Timezone:** Container defaults to UTC. Set `TZ` environment variable for local timezone (e.g., `TZ=America/New_York`).
 
@@ -85,8 +91,8 @@ Minimal configuration required - just 2 fields!
 **Clone the repository:**
 
 ```bash
-git clone https://github.com/thomas-lg/plex-releases-summary.git
-cd plex-releases-summary
+git clone https://github.com/thomas-lg/digestarr.git
+cd digestarr
 ```
 
 **Create Tautulli API key secret:**
@@ -122,14 +128,14 @@ That's it! On first run, the entrypoint automatically creates `config.yml` from 
 
 **🚀 Unraid users:** Installation is super simple! Just download the XML template and you're ready to go:
 
-1. **Get the template:** Download [my-plex-releases-summary.xml](my-plex-releases-summary.xml)
+1. **Get the template:** Download [my-digestarr.xml](my-digestarr.xml)
 
 2. **Add to Unraid:**
-   - Copy to: `/boot/config/plugins/dockerMan/templates-user/my-plex-releases-summary.xml`
+   - Copy to: `/boot/config/plugins/dockerMan/templates-user/my-digestarr.xml`
    - Refresh Docker tab in Unraid UI
 
 3. **Configure (just 2 settings!):**
-   - **Add Container** → Select "my-plex-releases-summary"
+   - **Add Container** → Select "my-digestarr"
    - Set **TAUTULLI_URL**: `http://tautulli:8181` (your Tautulli container)
    - Set **TAUTULLI_API_KEY**: Your Tautulli API key (find in Tautulli: Settings → Web Interface → API)
    - Click **Apply**
@@ -318,7 +324,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 ├── docker-compose.dev.yml # Development compose config
 ├── docker-compose.yml # Production compose config
 ├── entrypoint.sh # Container entrypoint script
-├── my-plex-releases-summary.xml # Unraid template
+├── my-digestarr.xml # Unraid template
 ├── pyproject.toml # Python project configuration
 ├── requirements-dev.txt # Development & testing dependencies (runtime deps live in pyproject.toml)
 ├── requirements-dev.lock # Compiled lockfile for dev dependencies
@@ -329,7 +335,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 
 ## Docker Images
 
-Pre-built images available: `ghcr.io/thomas-lg/plex-releases-summary`
+Pre-built images available: `ghcr.io/thomas-lg/digestarr`
 
 | Tag | Description |
 | --- | --- |
@@ -339,8 +345,8 @@ Pre-built images available: `ghcr.io/thomas-lg/plex-releases-summary`
 | `sha-<shortsha>` | Exact commit build from `main` (short commit SHA) |
 
 ```bash
-docker pull ghcr.io/thomas-lg/plex-releases-summary:latest
-docker pull ghcr.io/thomas-lg/plex-releases-summary:develop
+docker pull ghcr.io/thomas-lg/digestarr:latest
+docker pull ghcr.io/thomas-lg/digestarr:develop
 ```
 
 ## Deployment Options
@@ -384,7 +390,7 @@ Without the endpoint you can still monitor by exit code or log content:
 
 ```bash
 # One-shot mode - check exit code
-docker run --rm plex-releases-summary; [ $? -eq 0 ] || alert
+docker run --rm digestarr; [ $? -eq 0 ] || alert
 
 # Scheduled mode - check logs for successful summary completion
 docker logs container --since 24h | grep -q "✅ Run complete"

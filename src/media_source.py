@@ -19,6 +19,10 @@ class MediaItem(TypedDict, total=False):
     parent_media_index: int | str
     parent_title: str
     rating_key: int | str
+    # Which media server the item lives on: "plex", "jellyfin" or "emby". Decides the
+    # shape of the deep link; absent means Plex, which is all a Plex-only source such
+    # as Tautulli can ever report.
+    server_type: str
     title: str
     year: int | str
 
