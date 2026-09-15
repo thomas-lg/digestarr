@@ -34,9 +34,10 @@ logger = logging.getLogger(__name__)
 
 # Constants
 ENV_VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
-# Which fields must resolve depends on the selected media source, so this is the
-# superset; _required_fields_for() narrows it per source.
-REQUIRED_FIELDS = {"tautulli_url", "tautulli_api_key", "tracearr_url", "tracearr_api_key"}
+# Fields whose blank or unresolved value must survive expansion so that validation can
+# report it. Credentials are the superset of both sources; _REQUIRED_BY_SOURCE narrows
+# them to the selected one, while media_source itself is always required.
+REQUIRED_FIELDS = {"media_source", "tautulli_url", "tautulli_api_key", "tracearr_url", "tracearr_api_key"}
 MEDIA_SOURCE_TAUTULLI = "tautulli"
 MEDIA_SOURCE_TRACEARR = "tracearr"
 _VALID_MEDIA_SOURCES = [MEDIA_SOURCE_TAUTULLI, MEDIA_SOURCE_TRACEARR]
@@ -44,6 +45,13 @@ _REQUIRED_BY_SOURCE = {
     MEDIA_SOURCE_TAUTULLI: {"tautulli_url", "tautulli_api_key"},
     MEDIA_SOURCE_TRACEARR: {"tracearr_url", "tracearr_api_key"},
 }
+MEDIA_SOURCE_REQUIRED_MESSAGE = (
+    f"media_source is required and has no default: set it to one of {_VALID_MEDIA_SOURCES} in "
+    "config.yml, or through the MEDIA_SOURCE environment variable. "
+    f"'{MEDIA_SOURCE_TRACEARR}' is recommended and covers Plex, Jellyfin and Emby; "
+    f"'{MEDIA_SOURCE_TAUTULLI}' is Plex-only and is what installs upgrading from an earlier "
+    "version were running."
+)
 DEFAULT_CONFIG_PATH = "/app/configs/config.yml"
 # Template baked into the image by the Dockerfile; the source of truth for which
 # keys a given version understands.
@@ -244,7 +252,7 @@ class Config(BaseModel):
 
     # Media source selection
     media_source: str = Field(
-        MEDIA_SOURCE_TAUTULLI,
+        ...,
         description=f"Where recently added media is read from ({', '.join(_VALID_MEDIA_SOURCES)})",
     )
 
@@ -342,6 +350,23 @@ class Config(BaseModel):
                 "Either set run_once: true or provide a cron_schedule."
             )
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def require_explicit_media_source(cls, data: object) -> object:
+        """
+        Reject a missing, blank or unresolved media_source before field validation.
+
+        Which credentials are needed follows from the source, so the choice is the
+        user's to make rather than one to inherit from a default. An absent key has to
+        be caught here: a field validator never runs for a value that was not supplied.
+        """
+        if not isinstance(data, dict):
+            return data
+        candidate = data.get("media_source")
+        if not isinstance(candidate, str) or not candidate.strip() or ENV_VAR_PATTERN.search(candidate):
+            raise ValueError(MEDIA_SOURCE_REQUIRED_MESSAGE)
+        return data
 
     @field_validator("media_source")
     @classmethod

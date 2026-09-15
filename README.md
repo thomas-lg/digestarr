@@ -24,7 +24,7 @@
 
 A lightweight Docker container that digests what was recently added to your media library and posts a summary to Discord. Reads from [Tracearr](https://docs.tracearr.com) (Plex, Jellyfin or Emby) or from [Tautulli](https://tautulli.com/) (Plex only). Perfect for automated weekly notifications of new movies, TV shows and music.
 
-> **🚀 Unraid Users:** Jump to [Unraid Quick Start](#unraid-quick-start) - just download the XML template and configure 2 settings!
+> **🚀 Unraid Users:** Jump to [Unraid Quick Start](#unraid-quick-start) - just download the XML template and configure 3 settings!
 
 ## Table of Contents
 
@@ -64,7 +64,7 @@ A lightweight Docker container that digests what was recently added to your medi
 - 🎯 Configurable time range (e.g., last 7 days)
 - 💬 **Optional Discord notifications** with rich embed formatting (including friendly "nothing new" updates)
 - 🐳 Docker-ready with minimal footprint
-- 🔌 **Pluggable media source** — read from Tautulli (default) or [Tracearr](https://docs.tracearr.com)
+- 🔌 **Pluggable media source** — read from [Tracearr](https://docs.tracearr.com) (recommended) or Tautulli
 - 🎛️ **Media type filtering** — exclude types you don't care about (e.g. the music library)
 - 🩺 **Optional HTTP health endpoint** for container liveness probes and external monitors
 - 📊 Clean, formatted output with media type detection
@@ -79,14 +79,14 @@ Docker or Docker Compose, plus **one** media source:
 | **[Tracearr](https://docs.tracearr.com)** *(recommended)* | Plex, Jellyfin, Emby | Where new features go. Needs its own stack (TimescaleDB + Redis). Create a `trr_pub_…` token in its UI. |
 | [Tautulli](https://tautulli.com/) v2.1.0+ | Plex only | Maintenance mode: fixes yes, new features no. No extra infrastructure, and the only source that auto-detects the Plex server id. |
 
-Tautulli remains the default so existing installs keep working untouched; see
+`media_source` has no default: pick your source explicitly. See
 [Choosing a media source](CONFIGURATION.md#choosing-a-media-source).
 
 > **Timezone:** Container defaults to UTC. Set `TZ` environment variable for local timezone (e.g., `TZ=America/New_York`).
 
 ## Quick Start
 
-Minimal configuration required - just 2 fields!
+Minimal configuration required - just 3 fields!
 
 **Clone the repository:**
 
@@ -134,8 +134,9 @@ That's it! On first run, the entrypoint automatically creates `config.yml` from 
    - Copy to: `/boot/config/plugins/dockerMan/templates-user/my-digestarr.xml`
    - Refresh Docker tab in Unraid UI
 
-3. **Configure (just 2 settings!):**
+3. **Configure (just 3 settings!):**
    - **Add Container** → Select "my-digestarr"
+   - Set **MEDIA_SOURCE**: `tautulli` (or `tracearr` if you run Tracearr)
    - Set **TAUTULLI_URL**: `http://tautulli:8181` (your Tautulli container)
    - Set **TAUTULLI_API_KEY**: Your Tautulli API key (find in Tautulli: Settings → Web Interface → API)
    - Click **Apply**
@@ -156,13 +157,13 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 
 ## Configuration
 
-**Only 2 fields are required:** `tautulli_url` and `tautulli_api_key`. All other fields are optional and use the defaults shown below.
+**Required:** `media_source`, plus the credentials of the source you pick. All other fields are optional and use the defaults shown below.
 
 ### Available Configuration
 
 | Field                  | Required | Default        | Description                 |
 | ---------------------- | -------- | -------------- | --------------------------- |
-| `media_source`         | No       | `tautulli`     | `tautulli` or `tracearr`    |
+| **`media_source`**     | **Yes**  | -              | `tracearr` (recommended) or `tautulli` |
 | **`tautulli_url`**     | ⚠️\*     | -              | Tautulli server URL         |
 | **`tautulli_api_key`** | ⚠️\*     | -              | Tautulli API key            |
 | `tracearr_url`         | ⚠️\*     | -              | Tracearr URL                |
@@ -176,7 +177,7 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 | `enable_healthcheck`   | No       | `false`        | Serve `GET /health`         |
 | Other fields           | No       | See docs       | See full reference          |
 
-\* Only the selected `media_source`'s credentials are required.
+\* Only the selected `media_source`'s credentials are required. `media_source` itself has no default and must be set.
 
 > **📖 For complete configuration documentation**, including configuration methods, Docker secrets, all fields, troubleshooting, and examples, see **[CONFIGURATION.md](CONFIGURATION.md)**
 

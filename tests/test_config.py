@@ -190,6 +190,7 @@ class TestConfigModel:
         """Test creating config with only required fields."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": "test_api_key",
                 "run_once": True,  # Avoid needing cron_schedule
@@ -204,7 +205,9 @@ class TestConfigModel:
     def test_missing_required_field(self):
         """Test that missing required fields raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            Config.model_validate({"tautulli_url": "http://localhost:8181", "run_once": True})  # Missing api_key
+            Config.model_validate(
+                {"media_source": "tautulli", "tautulli_url": "http://localhost:8181", "run_once": True}
+            )  # Missing api_key
 
         assert "tautulli_api_key" in str(exc_info.value)
 
@@ -213,6 +216,7 @@ class TestConfigModel:
     def test_empty_required_field_rejected(self, field):
         """Test that empty strings for required fields raise ValidationError."""
         data = {
+            "media_source": "tautulli",
             "tautulli_url": "http://localhost:8181",
             "tautulli_api_key": "test_key",
             "run_once": True,
@@ -228,6 +232,7 @@ class TestConfigModel:
         for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             config = Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "log_level": level,
@@ -241,6 +246,7 @@ class TestConfigModel:
         """Test that log level validation is case-insensitive."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": "test_key",
                 "log_level": "info",
@@ -255,6 +261,7 @@ class TestConfigModel:
         with pytest.raises(ValidationError) as exc_info:
             Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "log_level": "INVALID",
@@ -353,6 +360,7 @@ class TestConfigValidation:
         with pytest.raises(ValidationError) as exc_info:
             Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "run_once": False,
@@ -367,6 +375,7 @@ class TestConfigValidation:
         """Test that cron_schedule is optional when run_once is True."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": "test_key",
                 "run_once": True,
@@ -382,6 +391,7 @@ class TestConfigValidation:
         with pytest.raises(ValidationError) as exc_info:
             Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "days_back": 0,
@@ -397,6 +407,7 @@ class TestConfigValidation:
         # Valid range
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": "test_key",
                 "initial_batch_size": 500,
@@ -409,6 +420,7 @@ class TestConfigValidation:
         with pytest.raises(ValidationError):
             Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "initial_batch_size": 0,
@@ -420,6 +432,7 @@ class TestConfigValidation:
         with pytest.raises(ValidationError):
             Config.model_validate(
                 {
+                    "media_source": "tautulli",
                     "tautulli_url": "http://localhost:8181",
                     "tautulli_api_key": "test_key",
                     "initial_batch_size": 10001,
@@ -431,7 +444,14 @@ class TestConfigValidation:
     def test_unresolved_env_var_detection_in_required_fields(self):
         """Test detection of unresolved env vars in required fields."""
         with pytest.raises(ValidationError) as exc_info:
-            Config.model_validate({"tautulli_url": "${UNSET_VAR}", "tautulli_api_key": "test_key", "run_once": True})
+            Config.model_validate(
+                {
+                    "media_source": "tautulli",
+                    "tautulli_url": "${UNSET_VAR}",
+                    "tautulli_api_key": "test_key",
+                    "run_once": True,
+                }
+            )
 
         error_msg = str(exc_info.value)
         assert "Unresolved environment variable" in error_msg
@@ -441,7 +461,12 @@ class TestConfigValidation:
     def test_default_values(self):
         """Test that default values are correctly applied."""
         config = Config.model_validate(
-            {"tautulli_url": "http://localhost:8181", "tautulli_api_key": "test_key", "run_once": True}
+            {
+                "media_source": "tautulli",
+                "tautulli_url": "http://localhost:8181",
+                "tautulli_api_key": "test_key",
+                "run_once": True,
+            }
         )
         assert config.days_back == 7
         assert config.media_server_url == "https://app.plex.tv"
@@ -457,6 +482,7 @@ class TestLoadConfig:
     def test_load_valid_config_file(self):
         """Test loading a valid configuration file."""
         config_data = {
+            "media_source": "tautulli",
             "tautulli_url": "http://localhost:8181",
             "tautulli_api_key": "test_api_key",
             "run_once": True,
@@ -479,6 +505,7 @@ class TestLoadConfig:
     def test_load_config_with_env_vars(self):
         """Test loading config with environment variable interpolation."""
         config_data = {
+            "media_source": "tautulli",
             "tautulli_url": "${TEST_TAUTULLI_URL}",
             "tautulli_api_key": "${TEST_TAUTULLI_KEY}",
             "run_once": True,
@@ -505,6 +532,7 @@ class TestLoadConfig:
             secret_file.write_text("secret_from_file")
 
             config_data = {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": "${API_KEY_FILE}",
                 "run_once": True,
@@ -540,6 +568,7 @@ class TestLoadConfig:
     def test_load_config_validation_failure(self):
         """Test that invalid config data raises ValidationError."""
         config_data = {
+            "media_source": "tautulli",
             "tautulli_url": "http://localhost:8181",
             # Missing required tautulli_api_key
             "run_once": True,
@@ -559,6 +588,7 @@ class TestLoadConfig:
     def test_load_config_fails_for_missing_required_secret_file(self):
         """Required fields pointing to missing secret files should fail fast."""
         config_data = {
+            "media_source": "tautulli",
             "tautulli_url": "http://localhost:8181",
             "tautulli_api_key": "/nonexistent/path/to/secret",
             "run_once": True,
@@ -582,6 +612,7 @@ class TestLoadConfig:
             empty_secret.write_text("\n")
 
             config_data = {
+                "media_source": "tautulli",
                 "tautulli_url": "http://localhost:8181",
                 "tautulli_api_key": str(empty_secret),
                 "run_once": True,
@@ -693,13 +724,14 @@ class TestExcludedMediaTypes:
     @pytest.mark.unit
     def test_defaults_to_empty_list(self):
         """Test that the field is empty by default, keeping behaviour unchanged."""
-        config = Config(tautulli_url="http://localhost:8181", tautulli_api_key="key")
+        config = Config(media_source="tautulli", tautulli_url="http://localhost:8181", tautulli_api_key="key")
         assert config.excluded_media_types == []
 
     @pytest.mark.unit
     def test_accepts_valid_types(self):
         """Test that known media types are accepted as a list."""
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://localhost:8181",
             tautulli_api_key="key",
             excluded_media_types=["track", "album"],
@@ -710,6 +742,7 @@ class TestExcludedMediaTypes:
     def test_normalises_case_and_whitespace(self):
         """Test that entries are lowercased and stripped."""
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://localhost:8181",
             tautulli_api_key="key",
             excluded_media_types=["  TRACK ", "Album"],
@@ -720,6 +753,7 @@ class TestExcludedMediaTypes:
     def test_deduplicates_entries(self):
         """Test that repeated types collapse to a single entry."""
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://localhost:8181",
             tautulli_api_key="key",
             excluded_media_types=["track", "TRACK"],
@@ -731,6 +765,7 @@ class TestExcludedMediaTypes:
         """Test that an unknown media type fails validation rather than being ignored."""
         with pytest.raises(ValidationError, match="excluded_media_types"):
             Config(
+                media_source="tautulli",
                 tautulli_url="http://localhost:8181",
                 tautulli_api_key="key",
                 excluded_media_types=["movie", "bogus"],
@@ -740,6 +775,7 @@ class TestExcludedMediaTypes:
     def test_accepts_comma_separated_string(self):
         """Test the env-var form, where ${VAR} interpolation yields a string."""
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://localhost:8181",
             tautulli_api_key="key",
             excluded_media_types=cast(list[str], "track, album"),
@@ -750,6 +786,7 @@ class TestExcludedMediaTypes:
     def test_empty_string_yields_empty_list(self):
         """Test that an empty env var does not produce a bogus entry."""
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://localhost:8181",
             tautulli_api_key="key",
             excluded_media_types=cast(list[str], ""),
@@ -764,6 +801,7 @@ class TestExcludedMediaTypes:
             config_path.write_text(
                 yaml.safe_dump(
                     {
+                        "media_source": "tautulli",
                         "tautulli_url": "http://localhost:8181",
                         "tautulli_api_key": "key",
                         "excluded_media_types": ["track"],
@@ -831,7 +869,7 @@ retry:
         """
         config_file, template_file = self._write(
             tmp_path,
-            "tautulli_url: ${TAUTULLI_URL}\ntautulli_api_key: ${TAUTULLI_API_KEY}\nrun_once: true\n",
+            "media_source: tautulli\ntautulli_url: ${TAUTULLI_URL}\ntautulli_api_key: ${TAUTULLI_API_KEY}\nrun_once: true\n",
         )
 
         with patch.dict(
@@ -848,6 +886,34 @@ retry:
             sync_missing_config_keys(str(config_file), str(template_file))
 
             assert load_config(str(config_file)).enable_healthcheck is True
+
+    @pytest.mark.unit
+    def test_config_predating_media_source_stops_with_actionable_guidance(self, tmp_path, monkeypatch):
+        """
+        The upgrade break: a config written before the source became pluggable has no
+        media_source, and the sync only appends it as ${MEDIA_SOURCE}. Until the user
+        picks one the run must stop, naming the choice rather than "field required".
+        """
+        monkeypatch.delenv("MEDIA_SOURCE", raising=False)
+        template = self.TEMPLATE + "\n# Where recently added media is read from\nmedia_source: ${MEDIA_SOURCE}\n"
+        config_file, template_file = self._write(
+            tmp_path,
+            "tautulli_url: ${TAUTULLI_URL}\ntautulli_api_key: ${TAUTULLI_API_KEY}\nrun_once: true\n",
+            template,
+        )
+        env = {"TAUTULLI_URL": "http://tautulli:8181", "TAUTULLI_API_KEY": "key"}
+
+        with patch.dict(os.environ, env):
+            with pytest.raises(ValidationError, match="media_source is required and has no default"):
+                load_config(str(config_file))
+
+            assert "media_source" in sync_missing_config_keys(str(config_file), str(template_file))
+
+            with pytest.raises(ValidationError, match="media_source is required and has no default"):
+                load_config(str(config_file))
+
+        with patch.dict(os.environ, {**env, "MEDIA_SOURCE": "tautulli"}):
+            assert load_config(str(config_file)).media_source == "tautulli"
 
     @pytest.mark.unit
     def test_carries_the_documenting_comments(self, tmp_path):
@@ -940,9 +1006,32 @@ class TestMediaSourceSelection:
     """Tests for which credentials a given media source requires."""
 
     @pytest.mark.unit
-    def test_defaults_to_tautulli(self):
-        """Existing installs keep their behaviour without touching config."""
-        config = Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key")
+    def test_omitting_the_source_is_an_error(self):
+        """There is no default: the source is an explicit choice."""
+        with pytest.raises(ValidationError, match="media_source is required and has no default"):
+            Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("blank", ["", "   ", None])
+    def test_a_blank_source_is_an_error(self, blank):
+        """A key left empty is as unchosen as a missing one."""
+        with pytest.raises(ValidationError, match="media_source is required and has no default"):
+            Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key", media_source=blank)
+
+    @pytest.mark.unit
+    def test_an_unresolved_source_reference_is_an_error(self):
+        """An unset ${MEDIA_SOURCE} must name the real problem, not the enum."""
+        with pytest.raises(ValidationError, match="media_source is required and has no default"):
+            Config(
+                tautulli_url="http://tautulli:8181",
+                tautulli_api_key="key",
+                media_source="${MEDIA_SOURCE}",
+            )
+
+    @pytest.mark.unit
+    def test_tautulli_remains_selectable(self):
+        """Choosing the former default explicitly still works."""
+        config = Config(tautulli_url="http://tautulli:8181", tautulli_api_key="key", media_source="tautulli")
 
         assert config.media_source == "tautulli"
 
@@ -963,7 +1052,7 @@ class TestMediaSourceSelection:
     def test_tautulli_credentials_are_required_for_tautulli(self):
         """The selected source must actually be configured."""
         with pytest.raises(ValidationError, match="tautulli_api_key is required"):
-            Config(tautulli_url="http://tautulli:8181")
+            Config(media_source="tautulli", tautulli_url="http://tautulli:8181")
 
     @pytest.mark.unit
     def test_tracearr_credentials_are_required_for_tracearr(self):
@@ -985,6 +1074,7 @@ class TestMediaSourceSelection:
         Tautulli user. That must not fail the run.
         """
         config = Config(
+            media_source="tautulli",
             tautulli_url="http://tautulli:8181",
             tautulli_api_key="key",
             tracearr_url="${TRACEARR_URL}",

@@ -2,7 +2,7 @@
 
 Complete configuration guide for Digestarr.
 
-> **Quick Start:** only 2 fields are required. See [Minimal Configuration](#minimal-configuration).
+> **Quick Start:** only 3 fields are required. See [Minimal Configuration](#minimal-configuration).
 
 ---
 
@@ -26,14 +26,16 @@ Complete configuration guide for Digestarr.
 
 Only these fields are required:
 
-1. `tautulli_url`
-2. `tautulli_api_key`
+1. `media_source` - `tracearr` (recommended) or `tautulli`
+2. the selected source's credentials: `tautulli_url` + `tautulli_api_key`, or
+   `tracearr_url` + `tracearr_api_key`
 
 All other fields are optional and fall back to defaults.
 
 ```yaml
 # deployment env file (example: docker-compose.yml)
 environment:
+  - MEDIA_SOURCE=tautulli
   - TAUTULLI_URL=http://tautulli:8181
   - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
 ```
@@ -59,7 +61,7 @@ All fields are defined in `src/config.py`.
 
 | Field                  | Type    | Required         | Default                 | Validation                            | Description                                                        |
 | ---------------------- | ------- | ---------------- | ----------------------- | ------------------------------------- | ------------------------------------------------------------------ |
-| `media_source`         | string  | No               | `"tautulli"`            | tautulli, tracearr                    | Where recently added media is read from                            |
+| **`media_source`**     | string  | **Yes**          | -                       | tautulli, tracearr                    | Where recently added media is read from (no default, must be set)  |
 | `tracearr_url`         | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Tracearr URL (required when `media_source` is `tracearr`)          |
 | `tracearr_api_key`     | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Tracearr public API token                                          |
 | **`tautulli_url`**     | string  | ⚠️ Conditional\*\*\*  | -                       | -                                     | Full URL to Tautulli instance (for example `http://tautulli:8181`) |
@@ -117,8 +119,10 @@ it keeps working and keeps getting fixes, but new capabilities are not backporte
 It stays worth choosing when you want no extra infrastructure, or you are on Plex and
 want the server id detected for you.
 
-`media_source` **still defaults to `tautulli`**, so no existing install changes
-behaviour by upgrading.
+`media_source` **is required and has no default** - the source decides which
+credentials matter, so the choice is yours to state rather than one to inherit. An
+install upgrading from a version that defaulted to Tautulli will stop at startup until
+`media_source` is set; `tautulli` reproduces exactly what it was doing before.
 
 ```yaml
 media_source: tracearr
@@ -299,7 +303,7 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
 | `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
-| `MEDIA_SOURCE`        | `media_source`        | tautulli (default) or tracearr |
+| `MEDIA_SOURCE`        | `media_source`        | Required: tracearr or tautulli |
 | `TRACEARR_URL`        | `tracearr_url`        | Tracearr URL                 |
 | `TRACEARR_API_KEY`    | `tracearr_api_key`    | Tracearr public API token    |
 | `ENABLE_HEALTHCHECK`  | `enable_healthcheck`  | Enable the health endpoint   |
