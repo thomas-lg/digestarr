@@ -95,18 +95,22 @@ git clone https://github.com/thomas-lg/digestarr.git
 cd digestarr
 ```
 
-**Create Tautulli API key secret:**
+**Create the API token secret:**
 
 ```bash
 mkdir -p secrets
-echo "your_tautulli_api_key" > secrets/tautulli_api_key
+echo "trr_pub_your_token" > secrets/tracearr_api_key
 ```
 
 **Update docker-compose.yml:**
 
 - Mount the secrets directory into the container (example: `./secrets:/run/secrets:ro`)
-- Set `TAUTULLI_URL` to your Tautulli server URL (e.g., `http://tautulli:8181` or `http://192.168.1.100:8181`)
-- Set `TAUTULLI_API_KEY=/run/secrets/tautulli_api_key` to read the secret from the mounted path
+- Set `MEDIA_SOURCE=tracearr`
+- Set `TRACEARR_URL` to your Tracearr instance (e.g., `http://tracearr:3000`)
+- Set `TRACEARR_API_KEY=/run/secrets/tracearr_api_key` to read the secret from the mounted path
+
+Reading from Tautulli (Plex only) instead? Use `MEDIA_SOURCE=tautulli` with `TAUTULLI_URL`
+and `TAUTULLI_API_KEY` in place of the two Tracearr variables.
 
 **Run the container:**
 
@@ -136,9 +140,10 @@ That's it! On first run, the entrypoint automatically creates `config.yml` from 
 
 3. **Configure (just 3 settings!):**
    - **Add Container** → Select "my-digestarr"
-   - Set **MEDIA_SOURCE**: `tautulli` (or `tracearr` if you run Tracearr)
-   - Set **TAUTULLI_URL**: `http://tautulli:8181` (your Tautulli container)
-   - Set **TAUTULLI_API_KEY**: Your Tautulli API key (find in Tautulli: Settings → Web Interface → API)
+   - Set **MEDIA_SOURCE**: `tracearr` (or `tautulli` if you read from Tautulli)
+   - Set **TRACEARR_URL**: `http://tracearr:3000` (your Tracearr container)
+   - Set **TRACEARR_API_KEY**: a `trr_pub_…` token created in Tracearr's UI
+   - *(Tautulli instead: set **TAUTULLI_URL** and **TAUTULLI_API_KEY** rather than the Tracearr pair)*
    - Click **Apply**
 
 **Done!** Everything else is automatic - appdata, config, weekly schedule (Sundays 4 PM), PUID/PGID (99/100).
@@ -416,7 +421,7 @@ See [Configuration Troubleshooting](CONFIGURATION.md#troubleshooting) for compre
 
 ### Credentials
 
-Never commit credentials. Use file-based secrets: mount secrets directory and set `TAUTULLI_API_KEY=/run/secrets/tautulli_api_key`. Application auto-reads files starting with `/`, and required secret files fail fast if missing, unreadable, or empty. See [Docker Secrets](CONFIGURATION.md#docker-secrets) for detailed setup.
+Never commit credentials. Use file-based secrets: mount secrets directory and set `TRACEARR_API_KEY=/run/secrets/tracearr_api_key` (or `TAUTULLI_API_KEY=/run/secrets/tautulli_api_key`). Application auto-reads files starting with `/`, and required secret files fail fast if missing, unreadable, or empty. See [Docker Secrets](CONFIGURATION.md#docker-secrets) for detailed setup.
 
 ### Container Security
 

@@ -35,9 +35,9 @@ All other fields are optional and fall back to defaults.
 ```yaml
 # deployment env file (example: docker-compose.yml)
 environment:
-  - MEDIA_SOURCE=tautulli
-  - TAUTULLI_URL=http://tautulli:8181
-  - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+  - MEDIA_SOURCE=tracearr
+  - TRACEARR_URL=http://tracearr:3000
+  - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
 ```
 
 **Notes:**
@@ -241,10 +241,12 @@ Set env vars in your deployment file and keep `${VAR}` references in `configs/co
 ```yaml
 # deployment env file (example: docker-compose.yml)
 environment:
-  - TAUTULLI_URL=http://tautulli:8181
+  - MEDIA_SOURCE=tracearr
+  - TRACEARR_URL=http://tracearr:3000
 
 # configs/config.yml
-tautulli_url: ${TAUTULLI_URL}
+media_source: ${MEDIA_SOURCE}
+tracearr_url: ${TRACEARR_URL}
 ```
 
 ### 2) Hardcoded Values
@@ -253,8 +255,9 @@ Useful for local testing.
 
 ```yaml
 # configs/config.yml
-tautulli_url: http://192.168.1.100:8181
-tautulli_api_key: your_api_key
+media_source: tracearr
+tracearr_url: http://192.168.1.100:3000
+tracearr_api_key: trr_pub_your_token
 ```
 
 ⚠️ Do not commit credentials.
@@ -266,10 +269,10 @@ Set env vars to secret file paths. The app detects leading `/` and reads file co
 ```yaml
 # deployment env file (example: docker-compose.yml)
 environment:
-  - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+  - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
 
 # configs/config.yml
-tautulli_api_key: ${TAUTULLI_API_KEY}
+tracearr_api_key: ${TRACEARR_API_KEY}
 ```
 
 ---
@@ -278,11 +281,11 @@ tautulli_api_key: ${TAUTULLI_API_KEY}
 
 Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 
-- Set env vars for required fields (`TAUTULLI_URL`, `TAUTULLI_API_KEY`) always.
+- Set env vars for required fields (`MEDIA_SOURCE`, plus that source's URL and API key) always.
 - Set env vars for optional fields only when overriding defaults.
 - Leave optional env vars unset to use defaults.
 
-| Env var state       | Required field (`TAUTULLI_URL`) | Optional field (`DAYS_BACK`) |
+| Env var state       | Required field (`TRACEARR_URL`) | Optional field (`DAYS_BACK`) |
 | ------------------- | ------------------------------- | ---------------------------- |
 | Not set             | ❌ Startup error                | ✅ Uses default silently     |
 | Empty string (`""`) | ❌ Startup error                | ⚠️ Warning, uses default     |
@@ -292,8 +295,8 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 
 | Environment Variable  | Config Field          | Purpose                      |
 | --------------------- | --------------------- | ---------------------------- |
-| `TAUTULLI_URL`        | `tautulli_url`        | Tautulli URL (required)      |
-| `TAUTULLI_API_KEY`    | `tautulli_api_key`    | Tautulli API key (required)  |
+| `TAUTULLI_URL`        | `tautulli_url`        | Tautulli URL (required for tautulli) |
+| `TAUTULLI_API_KEY`    | `tautulli_api_key`    | Tautulli API key (required for tautulli) |
 | `DAYS_BACK`           | `days_back`           | Days lookback override       |
 | `CRON_SCHEDULE`       | `cron_schedule`       | Schedule override            |
 | `DISCORD_WEBHOOK_URL` | `discord_webhook_url` | Enable Discord notifications |
@@ -304,8 +307,8 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
 | `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
 | `MEDIA_SOURCE`        | `media_source`        | Required: tracearr or tautulli |
-| `TRACEARR_URL`        | `tracearr_url`        | Tracearr URL                 |
-| `TRACEARR_API_KEY`    | `tracearr_api_key`    | Tracearr public API token    |
+| `TRACEARR_URL`        | `tracearr_url`        | Tracearr URL (required for tracearr) |
+| `TRACEARR_API_KEY`    | `tracearr_api_key`    | Tracearr public API token (required for tracearr) |
 | `ENABLE_HEALTHCHECK`  | `enable_healthcheck`  | Enable the health endpoint   |
 | `HEALTH_HOST`         | `health_host`         | Health endpoint bind address |
 | `HEALTH_PORT`         | `health_port`         | Health endpoint port         |
@@ -326,7 +329,7 @@ services:
     volumes:
       - ./secrets:/run/secrets:ro
     environment:
-      - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+      - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
       - DISCORD_WEBHOOK_URL=/run/secrets/discord_webhook
 ```
 
@@ -334,7 +337,7 @@ Create secret files:
 
 ```bash
 mkdir -p secrets
-echo "your_api_key" > secrets/tautulli_api_key
+echo "trr_pub_your_token" > secrets/tracearr_api_key
 echo "https://discord.com/api/webhooks/..." > secrets/discord_webhook
 chmod 600 secrets/*
 ```
@@ -345,8 +348,9 @@ chmod 600 secrets/*
 
 ```yaml
 environment:
-  - TAUTULLI_URL=http://tautulli:8181
-  - TAUTULLI_API_KEY=your_api_key_here
+  - MEDIA_SOURCE=tracearr
+  - TRACEARR_URL=http://tracearr:3000
+  - TRACEARR_API_KEY=trr_pub_your_token
   - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc...
 ```
 
@@ -356,13 +360,13 @@ environment:
 services:
   app:
     secrets:
-      - tautulli_api_key
+      - tracearr_api_key
     environment:
-      - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+      - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
 
 secrets:
-  tautulli_api_key:
-    file: ./secrets/tautulli_api_key
+  tracearr_api_key:
+    file: ./secrets/tracearr_api_key
 ```
 
 ### How Values Are Processed
@@ -388,8 +392,9 @@ services:
       - ./configs:/app/configs:ro
       - ./secrets:/run/secrets:ro
     environment:
-      - TAUTULLI_URL=http://tautulli:8181
-      - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+      - MEDIA_SOURCE=tracearr
+      - TRACEARR_URL=http://tracearr:3000
+      - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
     restart: unless-stopped
 ```
 
@@ -403,8 +408,9 @@ services:
       - ./configs:/app/configs:ro
       - ./secrets:/run/secrets:ro
     environment:
-      - TAUTULLI_URL=http://tautulli:8181
-      - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+      - MEDIA_SOURCE=tracearr
+      - TRACEARR_URL=http://tracearr:3000
+      - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
       - DISCORD_WEBHOOK_URL=/run/secrets/discord_webhook
       - RUN_ONCE=true
       - DAYS_BACK=14
@@ -569,7 +575,7 @@ extra_hosts:
 ### Unresolved environment variable error
 
 - Required field references undefined/empty env var.
-- Set non-empty `TAUTULLI_URL` and `TAUTULLI_API_KEY`.
+- Set `MEDIA_SOURCE`, and non-empty URL and API key for that source (`TRACEARR_*` or `TAUTULLI_*`).
 
 ### Discord notifications not sending
 
@@ -588,7 +594,7 @@ extra_hosts:
 ### Secret file not found/readable
 
 - Verify mount: `./secrets:/run/secrets:ro`.
-- Verify path: `TAUTULLI_API_KEY=/run/secrets/tautulli_api_key`.
+- Verify path: `TRACEARR_API_KEY=/run/secrets/tracearr_api_key`.
 - Verify permissions: `chmod 600 secrets/*`.
 - Ensure required secret files are non-empty.
 
