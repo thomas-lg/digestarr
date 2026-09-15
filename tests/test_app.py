@@ -238,6 +238,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -280,6 +281,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": False,
@@ -311,6 +313,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -352,6 +355,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -398,6 +402,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -435,6 +440,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -472,6 +478,7 @@ class TestRunSummary:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -490,6 +497,7 @@ class TestMain:
     def _stub_config():
         return Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -637,6 +645,7 @@ class TestSendDiscordNotification:
     def _make_config(self, *, media_server_id=None, run_once=True):
         return Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": run_once,
@@ -879,6 +888,7 @@ class TestRunSummaryFetchErrors:
     def _base_config(self):
         return Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -925,6 +935,7 @@ class TestMainAppVersionFromEnv:
         """main() should use APP_VERSION env var instead of importlib.metadata."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -952,6 +963,7 @@ class TestSendDiscordNotificationDefensiveRaise:
         """Passing a config whose discord_webhook_url is None should hit the guard and return 1."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -983,6 +995,7 @@ class TestMainScheduledAndFatalPaths:
         """main() with run_once=False should call run_scheduled with the cron_schedule."""
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": False,
@@ -1121,6 +1134,7 @@ class TestRunSummaryExcludesMediaTypes:
 
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli:8181",
                 "tautulli_api_key": "secret",
                 "run_once": True,
@@ -1146,6 +1160,7 @@ class TestHealthServerStartup:
 
     def _config(self, **overrides):
         base = {
+            "media_source": "tautulli",
             "tautulli_url": "http://tautulli:8181",
             "tautulli_api_key": "secret",
             "run_once": False,
@@ -1216,6 +1231,7 @@ class TestBuildMediaSource:
     @staticmethod
     def _config(**overrides):
         base = {
+            "media_source": "tautulli",
             "tautulli_url": "http://tautulli:8181",
             "tautulli_api_key": "secret",
             "run_once": True,
@@ -1224,8 +1240,8 @@ class TestBuildMediaSource:
         return Config.model_validate(base)
 
     @pytest.mark.unit
-    def test_defaults_to_tautulli(self):
-        """Unconfigured installs keep reading from Tautulli."""
+    def test_builds_the_tautulli_client_for_tautulli(self):
+        """Selecting tautulli wires up the Tautulli client."""
         source = _build_media_source(self._config())
 
         # Asserted against the class src.app itself imported: under PYTHONPATH=src,

@@ -34,7 +34,8 @@
 # REQUIRED FIELDS
 # -----------------------------------------------------------------------------
 
-# Where recently added media is read from: tautulli (default) or tracearr
+# Where recently added media is read from. Required - there is no default.
+# tracearr (recommended): Plex, Jellyfin and Emby. tautulli: Plex only.
 media_source: ${MEDIA_SOURCE}
 
 # Tracearr instance URL and public API token (required when media_source is tracearr)
