@@ -8,12 +8,17 @@ services:
       - ./secrets:/run/secrets:ro
 
     # Environment variables for configuration
-    # Only 2 required: TAUTULLI_URL and TAUTULLI_API_KEY
+    # Only 3 required: MEDIA_SOURCE, plus the URL and API key of that source
     # For full configuration options, see: CONFIGURATION.md#environment-variables-and-docker
     environment:
       # ========== REQUIRED ==========
-      - TAUTULLI_URL=http://tautulli:8181
-      - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
+      - MEDIA_SOURCE=tracearr
+      - TRACEARR_URL=http://tracearr:3000
+      - TRACEARR_API_KEY=/run/secrets/tracearr_api_key
+      # Reading from Tautulli (Plex only) instead? Replace the three lines above with:
+      #   - MEDIA_SOURCE=tautulli
+      #   - TAUTULLI_URL=http://tautulli:8181
+      #   - TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
 
     # -------------------------------------------------------------------------
     # HEALTH ENDPOINT (optional)
@@ -86,7 +91,7 @@ services:
 # Optional: Docker Compose secrets (alternative to volume-mounted secrets)
 # Uncomment to use Docker secrets instead of volume-mounted files
 # secrets:
-#   tautulli_api_key:
-#     file: ./secrets/tautulli_api_key
+#   tracearr_api_key:
+#     file: ./secrets/tracearr_api_key
 #   discord_webhook:
 #     file: ./secrets/discord_webhook

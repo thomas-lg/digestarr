@@ -59,6 +59,7 @@ def config_with_discord() -> Config:
     """Minimal config with Discord enabled and no preset media_server_id."""
     return Config.model_validate(
         {
+            "media_source": "tautulli",
             "tautulli_url": "http://tautulli.test:8181",
             "tautulli_api_key": "test-key",
             "run_once": True,
@@ -73,6 +74,7 @@ def config_no_discord() -> Config:
     """Minimal config with Discord disabled — useful for fetch-logic tests."""
     return Config.model_validate(
         {
+            "media_source": "tautulli",
             "tautulli_url": "http://tautulli.test:8181",
             "tautulli_api_key": "test-key",
             "run_once": True,
@@ -246,6 +248,7 @@ class TestBatchFetchLogic:
         """
         config = Config.model_validate(
             {
+                "media_source": "tautulli",
                 "tautulli_url": "http://tautulli.test:8181",
                 "tautulli_api_key": "test-key",
                 "run_once": True,
