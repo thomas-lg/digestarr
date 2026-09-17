@@ -97,12 +97,14 @@ run_once: ${RUN_ONCE}
 # Default: None (disabled)
 discord_webhook_url: ${DISCORD_WEBHOOK_URL}
 
-# Plex server URL for generating clickable media links
+# Base URL of the media server the clickable links point at: Plex, Jellyfin or Emby
+# Examples: http://plex:32400, http://jellyfin:8096, http://emby:8096
 # Default: https://app.plex.tv
 media_server_url: ${MEDIA_SERVER_URL}
 
-# Plex server machine identifier
-# Default: Auto-detected via Tautulli
+# Media server identifier, used to build the links
+# Required for Plex links, optional for Jellyfin and Emby
+# Default: auto-detected, but only when media_source is tautulli
 media_server_id: ${MEDIA_SERVER_ID}
 
 # Logging level
