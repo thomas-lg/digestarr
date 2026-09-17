@@ -11,6 +11,8 @@ from typing import Any, NotRequired, TypedDict, cast
 import requests
 from discord_webhook import DiscordEmbed, DiscordWebhook
 
+from media_source import PlayStats, TitlePlays
+
 # Type definitions for Discord payloads
 
 
@@ -39,6 +41,26 @@ def _escape_title_markdown(text: str) -> str:
     """
     markdown_chars = r"([\\`*_~\[\]])"
     return re.sub(markdown_chars, r"\\\1", text)
+
+
+def _plays_label(plays: int) -> str:
+    """Render a play count with its unit pluralised."""
+    return f"{plays} play{'s' if plays != 1 else ''}"
+
+
+def _format_watch_time(total_ms: int) -> str:
+    """
+    Render a duration in milliseconds as a human-readable span.
+
+    Args:
+        total_ms: Duration in milliseconds
+
+    Returns:
+        A string like "12h 30m", "45m", or "0m" for nothing at all
+    """
+    total_minutes = max(0, total_ms) // 60_000
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours}h {minutes}m" if hours else f"{minutes}m"
 
 
 class DiscordNotifier:
@@ -90,6 +112,9 @@ class DiscordNotifier:
         "Music Tracks": "music tracks",
         "Other": "items",
     }
+
+    # Position markers for the play stats rankings, one per podium place
+    RANK_MARKERS = ["🥇", "🥈", "🥉"]
 
     # Friendly empty-state messages when no new media is found
     NO_NEW_TITLES = [
@@ -267,6 +292,113 @@ class DiscordNotifier:
         except Exception as e:
             logger.exception("Unexpected error sending Discord notification: %s", e)
             return False
+
+    def send_play_stats(self, stats: PlayStats, days_back: int) -> bool:
+        """
+        Send the play stats section: what was watched over the same window.
+
+        A separate message rather than a field on the summary, since the summary is
+        already split per category and has no single embed to hang this off.
+
+        Args:
+            stats: Aggregated play statistics from the media source
+            days_back: Number of days the statistics cover
+
+        Returns:
+            bool: True if the message was accepted by Discord
+        """
+        try:
+            webhook = DiscordWebhook(url=self.webhook_url)
+            webhook.add_embed(self._create_play_stats_embed(stats, days_back))
+
+            response = self._send_with_retry(webhook)
+            if response.status_code in [200, 204]:
+                logger.info("✅ Discord notification sent: Play Stats (%d plays)", stats["total_plays"])
+                return True
+
+            logger.error(
+                "Discord webhook failed with status %d for the play stats message: %s",
+                response.status_code,
+                response.text,
+            )
+            return False
+        except requests.RequestException as e:
+            logger.error("Network error sending the play stats notification: %s", e)
+            return False
+        except Exception as e:
+            logger.exception("Unexpected error sending the play stats notification: %s", e)
+            return False
+
+    def _create_play_stats_embed(self, stats: PlayStats, days_back: int) -> DiscordEmbed:
+        """Create the play stats embed: most played, top users, and total watch time."""
+        date_range = f"Last {days_back} day{'s' if days_back != 1 else ''}"
+        total_plays = stats["total_plays"]
+
+        embed = DiscordEmbed(
+            title=f"📊 Play Stats - {date_range}",
+            description=(
+                f"**{total_plays} play{'s' if total_plays != 1 else ''}** across the library"
+                if total_plays
+                else f"Nothing was watched in the last {days_back} day{'s' if days_back != 1 else ''} 😴"
+            ),
+            color=0xFEE75C,  # Gold, so the section reads apart from the green summary
+        )
+
+        if total_plays:
+            embed.add_embed_field(
+                name="🏆 Most played",
+                value=self._fit_lines(
+                    [
+                        f"{marker} {self._stats_title(title)} — {_plays_label(title['plays'])}"
+                        for marker, title in zip(self.RANK_MARKERS, stats["top_titles"], strict=False)
+                    ]
+                ),
+                inline=False,
+            )
+            embed.add_embed_field(
+                name="👤 Top users",
+                value=self._fit_lines(
+                    [
+                        f"{marker} **{_escape_title_markdown(user['username'])}** — "
+                        f"{_plays_label(user['plays'])} ({_format_watch_time(user['watch_time_ms'])})"
+                        for marker, user in zip(self.RANK_MARKERS, stats["top_users"], strict=False)
+                    ]
+                ),
+                inline=False,
+            )
+            embed.add_embed_field(
+                name="⏱️ Total watch time",
+                value=_format_watch_time(stats["total_watch_time_ms"]),
+                inline=False,
+            )
+
+        embed.set_footer(text=f"Generated on {datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        embed.set_timestamp()
+        return embed
+
+    def _stats_title(self, title: TitlePlays) -> str:
+        """Render a ranked title, linked back to its media server when possible."""
+        safe_title = _escape_title_markdown(title["title"])
+        rating_key = title.get("rating_key")
+        link_url = self._build_deep_link(title.get("server_type", "plex"), rating_key) if rating_key else None
+        return f"[{safe_title}]({link_url})" if link_url else f"**{safe_title}**"
+
+    def _fit_lines(self, lines: list[str]) -> str:
+        """
+        Join ranking lines, dropping the tail that would not fit a Discord field.
+
+        A ranking is short by construction, so this only bites on titles long enough
+        to blow the 1024-character field limit between them.
+        """
+        kept: list[str] = []
+        used = 0
+        for line in lines:
+            if used + len(line) + 1 > self.MAX_FIELD_VALUE and kept:
+                logger.warning("Dropped %d play stats line(s) that did not fit a Discord field", len(lines) - len(kept))
+                break
+            kept.append(line)
+            used += len(line) + 1
+        return "\n".join(kept)[: self.MAX_FIELD_VALUE] or "—"
 
     def _create_no_new_items_embed(self, days_back: int) -> DiscordEmbed:
         """Create a friendly embed for periods with no new items."""

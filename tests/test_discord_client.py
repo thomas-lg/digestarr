@@ -1,9 +1,11 @@
 """Unit tests for Discord client size calculation logic."""
 
 import pytest
+import requests
 from discord_webhook import DiscordEmbed
 
-from src.discord_client import DiscordMediaItem, DiscordNotifier
+from src.discord_client import DiscordMediaItem, DiscordNotifier, _format_watch_time
+from src.media_source import PlayStats
 
 
 class TestDiscordNotifier:
@@ -1159,3 +1161,180 @@ class TestDeepLinksPerServerType:
         )
 
         assert "http://jellyfin:8096/web/index.html#/details?id=abc123" in rendered
+
+
+class TestPlayStatsEmbed:
+    """Tests for the play stats embed and its delivery."""
+
+    @pytest.fixture
+    def notifier(self):
+        return DiscordNotifier(
+            webhook_url="https://discord.com/api/webhooks/test",
+            media_server_url="https://app.plex.tv",
+            media_server_id="srv",
+        )
+
+    @staticmethod
+    def _stats(**overrides) -> PlayStats:
+        stats: PlayStats = {
+            "top_titles": [
+                {"title": "House of the Dragon", "plays": 12, "watch_time_ms": 43_200_000, "rating_key": "2947"},
+                {"title": "Dune (2021)", "plays": 3, "watch_time_ms": 10_800_000},
+            ],
+            "top_users": [
+                {"username": "thomas", "plays": 12, "watch_time_ms": 43_200_000},
+                {"username": "alex", "plays": 3, "watch_time_ms": 10_800_000},
+            ],
+            "total_plays": 15,
+            "total_watch_time_ms": 54_000_000,
+        }
+        stats.update(overrides)  # type: ignore[typeddict-item]
+        return stats
+
+    @pytest.mark.unit
+    def test_embed_carries_the_three_sections(self, notifier):
+        """The embed should show most played, top users and the total watch time."""
+        embed = notifier._create_play_stats_embed(self._stats(), days_back=7)
+
+        assert embed.title == "📊 Play Stats - Last 7 days"
+        assert "15 plays" in embed.description
+        names = [field["name"] for field in embed.fields]
+        assert names == ["🏆 Most played", "👤 Top users", "⏱️ Total watch time"]
+        assert embed.fields[2]["value"] == "15h 0m"
+
+    @pytest.mark.unit
+    def test_titles_link_back_when_a_rating_key_is_known(self, notifier):
+        """A ranked title with a rating key should be a link, and a bare one bold."""
+        embed = notifier._create_play_stats_embed(self._stats(), days_back=7)
+        most_played = embed.fields[0]["value"]
+
+        assert "[House of the Dragon](https://app.plex.tv/desktop#!/server/srv/details?key=" in most_played
+        assert "**Dune (2021)**" in most_played
+
+    @pytest.mark.unit
+    def test_rankings_are_numbered_and_carry_watch_time(self, notifier):
+        """Users should be ranked with a marker, their plays and their watch time."""
+        embed = notifier._create_play_stats_embed(self._stats(), days_back=7)
+        top_users = embed.fields[1]["value"].splitlines()
+
+        assert top_users[0] == "🥇 **thomas** — 12 plays (12h 0m)"
+        assert top_users[1] == "🥈 **alex** — 3 plays (3h 0m)"
+
+    @pytest.mark.unit
+    def test_singular_play_is_not_pluralised(self, notifier):
+        """One play should read as a play, not 1 plays."""
+        stats = self._stats(
+            top_titles=[{"title": "Dune", "plays": 1, "watch_time_ms": 60_000}],
+            top_users=[{"username": "alex", "plays": 1, "watch_time_ms": 60_000}],
+            total_plays=1,
+            total_watch_time_ms=60_000,
+        )
+        embed = notifier._create_play_stats_embed(stats, days_back=1)
+
+        assert "**1 play**" in embed.description
+        assert "Last 1 day" in embed.title
+        assert "1 play (1m)" in embed.fields[1]["value"]
+
+    @pytest.mark.unit
+    def test_nothing_watched_renders_without_fields(self, notifier):
+        """A window with no plays should say so rather than show empty rankings."""
+        stats = self._stats(top_titles=[], top_users=[], total_plays=0, total_watch_time_ms=0)
+        embed = notifier._create_play_stats_embed(stats, days_back=7)
+
+        assert "Nothing was watched" in embed.description
+        assert embed.fields == []
+
+    @pytest.mark.unit
+    def test_lines_that_would_overflow_a_field_are_dropped(self, notifier, caplog):
+        """Titles long enough to blow the field limit should lose the tail, not the message."""
+        caplog.set_level("WARNING")
+        value = notifier._fit_lines(["a" * 600, "b" * 600, "c" * 10])
+
+        assert value == "a" * 600
+        assert any("did not fit" in record.message for record in caplog.records)
+
+    @pytest.mark.unit
+    def test_empty_ranking_falls_back_to_a_dash(self, notifier):
+        """A field value is never empty, which Discord would reject."""
+        assert notifier._fit_lines([]) == "—"
+
+    @pytest.mark.unit
+    def test_send_play_stats_reports_success(self, notifier, monkeypatch, caplog):
+        """A 204 from Discord should be reported as a success."""
+        sent = []
+
+        class StubWebhook:
+            def __init__(self, url):
+                self.url = url
+                self.timeout = None
+
+            def add_embed(self, embed):
+                sent.append(embed)
+
+            def execute(self):
+                return type("R", (), {"status_code": 204, "text": ""})()
+
+        monkeypatch.setattr("src.discord_client.DiscordWebhook", StubWebhook)
+        caplog.set_level("INFO")
+
+        assert notifier.send_play_stats(self._stats(), days_back=7) is True
+        assert len(sent) == 1
+        assert any("Play Stats" in record.message for record in caplog.records)
+
+    @pytest.mark.unit
+    def test_send_play_stats_reports_a_rejected_message(self, notifier, monkeypatch, caplog):
+        """A non-2xx status should be logged and reported as a failure."""
+
+        class StubWebhook:
+            def __init__(self, url):
+                self.timeout = None
+
+            def add_embed(self, embed):
+                return None
+
+            def execute(self):
+                return type("R", (), {"status_code": 500, "text": "nope"})()
+
+        monkeypatch.setattr("src.discord_client.DiscordWebhook", StubWebhook)
+        caplog.set_level("ERROR")
+
+        assert notifier.send_play_stats(self._stats(), days_back=7) is False
+        assert any("play stats message" in record.message for record in caplog.records)
+
+    @pytest.mark.unit
+    def test_network_error_is_not_fatal(self, notifier, monkeypatch):
+        """A network failure should be swallowed into a False, never raised."""
+        monkeypatch.setattr(
+            "src.discord_client.DiscordNotifier._create_play_stats_embed",
+            lambda self, stats, days: (_ for _ in ()).throw(requests.RequestException("down")),
+        )
+        assert notifier.send_play_stats(self._stats(), days_back=7) is False
+
+    @pytest.mark.unit
+    def test_unexpected_error_is_not_fatal(self, notifier, monkeypatch):
+        """Any other failure should be swallowed too."""
+        monkeypatch.setattr(
+            "src.discord_client.DiscordNotifier._create_play_stats_embed",
+            lambda self, stats, days: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        assert notifier.send_play_stats(self._stats(), days_back=7) is False
+
+
+class TestFormatWatchTime:
+    """Tests for the watch time formatter."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("total_ms", "expected"),
+        [
+            (0, "0m"),
+            (59_000, "0m"),
+            (60_000, "1m"),
+            (3_600_000, "1h 0m"),
+            (45_000_000, "12h 30m"),
+            (-1, "0m"),
+        ],
+    )
+    def test_durations_render_as_hours_and_minutes(self, total_ms, expected):
+        """Durations below an hour drop the hours part; negatives clamp to zero."""
+        assert _format_watch_time(total_ms) == expected

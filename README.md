@@ -66,6 +66,7 @@ A lightweight Docker container that digests what was recently added to your medi
 - 🐳 Docker-ready with minimal footprint
 - 🔌 **Pluggable media source** — read from [Tracearr](https://docs.tracearr.com) (recommended) or Tautulli
 - 🎛️ **Media type filtering** — exclude types you don't care about (e.g. the music library)
+- 🏆 **Play stats** — most played titles, top viewers and total watch time ([Tracearr](https://docs.tracearr.com) only)
 - 🩺 **Optional HTTP health endpoint** for container liveness probes and external monitors
 - 📊 Clean, formatted output with media type detection
 - ⚡ Graceful shutdown handling for containerized environments
@@ -180,16 +181,17 @@ Run once and exit. Set `RUN_ONCE=true`. See [examples](CONFIGURATION.md#examples
 | Field                  | Required | Default        | Description                 |
 | ---------------------- | -------- | -------------- | --------------------------- |
 | **`media_source`**     | **Yes**  | -              | `tracearr` (recommended) or `tautulli` |
-| **`tautulli_url`**     | ⚠️\*     | -              | Tautulli server URL         |
-| **`tautulli_api_key`** | ⚠️\*     | -              | Tautulli API key            |
-| `tracearr_url`         | ⚠️\*     | -              | Tracearr URL                |
-| `tracearr_api_key`     | ⚠️\*     | -              | Tracearr public API token   |
+| **`tracearr_url`**     | ⚠️\*     | -              | Tracearr URL                |
+| **`tracearr_api_key`** | ⚠️\*     | -              | Tracearr public API token   |
+| `tautulli_url`         | ⚠️\*     | -              | Tautulli server URL (Plex only) |
+| `tautulli_api_key`     | ⚠️\*     | -              | Tautulli API key            |
 | `days_back`            | No       | `7`            | Days to look back           |
 | `cron_schedule`        | No       | `0 16 * * SUN` | CRON schedule (Sunday 4 PM) |
 | `discord_webhook_url`  | No       | None           | Discord webhook (optional)  |
 | `run_once`             | No       | `false`        | One-shot mode               |
 | `log_level`            | No       | `INFO`         | Logging level               |
 | `excluded_media_types` | No       | `[]`           | Media types to omit         |
+| `include_play_stats`   | No       | `false`        | Play stats (Tracearr only)  |
 | `enable_healthcheck`   | No       | `false`        | Serve `GET /health`         |
 | Other fields           | No       | See docs       | See full reference          |
 

@@ -221,3 +221,6 @@ __marimo__/
 # Project-specific
 secrets/
 logs/*.log*
+
+# Claude Code local settings (machine-specific, not shared)
+.claude/settings.local.json

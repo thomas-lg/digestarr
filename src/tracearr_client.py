@@ -20,7 +20,7 @@ from typing import Any, TypeVar, cast
 import requests
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from media_source import MediaItem, ServerIdentity
+from media_source import MediaItem, PlayStats, ServerIdentity, TitlePlays, UserPlays
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,10 @@ REQUEST_TIMEOUT_SECONDS = 15
 # separates the two cases, so this is deliberately generous.
 BURST_GAP_SECONDS = 3600
 
+# How many entries each play stats ranking shows. A podium: three keeps the embed
+# readable and leaves room for the long titles a media library is full of.
+PLAY_STATS_TOP_N = 3
+
 
 class TracearrLibraryItem(BaseModel):
     """A row from /recently-added, validated loosely: unknown fields are ignored."""
@@ -55,6 +59,34 @@ class TracearrLibraryItem(BaseModel):
     rating_key: str | None = None
     parent_rating_key: str | None = None
     grandparent_rating_key: str | None = None
+
+
+class TracearrHistoryUser(BaseModel):
+    """The viewer block on a history row; every name field can be null."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str | None = None
+    username: str | None = None
+
+
+class TracearrHistoryRow(BaseModel):
+    """A play from /history: one resume chain, not one raw session row."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    media_type: str
+    media_title: str
+    started_at: str
+    show_title: str | None = None
+    year: int | None = None
+    # Total time actually played across the chain's segments, which is what the
+    # digest reports; progress_ms would instead be a position in the file.
+    duration_ms: int | None = None
+    server_type: str | None = None
+    rating_key: str | None = None
+    grandparent_rating_key: str | None = None
+    user: TracearrHistoryUser | None = None
 
 
 class TracearrClient:
@@ -565,6 +597,121 @@ class TracearrClient:
             item["media_index"] = episode_number
         return item
 
+    # -------------------------------------------------------------- play stats
+
+    def _iter_history_rows(self, cutoff: datetime) -> list[TracearrHistoryRow]:
+        """
+        Page /history for every play started at or after ``cutoff``.
+
+        The window is applied server-side through ``since``, so the walk ends when
+        Tracearr stops handing back a cursor rather than on a timestamp comparison.
+
+        Args:
+            cutoff: Oldest moment to include
+
+        Returns:
+            Validated play rows
+        """
+        rows: list[TracearrHistoryRow] = []
+        cursor: str | None = None
+
+        for _page in range(MAX_PAGES):
+            params: dict[str, Any] = {"pageSize": PAGE_SIZE, "since": _to_iso(cutoff)}
+            if cursor:
+                params["cursor"] = cursor
+            if self.server_id:
+                params["server_id"] = self.server_id
+
+            payload = self._request("/history", params)
+            data = payload.get("data") or []
+            if not isinstance(data, list):
+                raise ValueError("Expected 'data' to be a list in the /history payload")
+
+            for raw in data:
+                rows.append(self._validate_response(cast(dict[str, object], raw), TracearrHistoryRow))
+
+            cursor = (payload.get("meta") or {}).get("nextCursor")
+            if not cursor or not data:
+                break
+        else:
+            logger.warning("Reached max pages (%d) walking /history; using what was collected", MAX_PAGES)
+
+        logger.debug("Collected %d plays from Tracearr within the window", len(rows))
+        return rows
+
+    def get_play_stats(self, cutoff: datetime) -> PlayStats:
+        """
+        Aggregate what was watched at or after ``cutoff``.
+
+        Tracearr also exposes pre-rolled figures on /users/{id}/stats, but only over
+        fixed all-time, 30-day and 7-day windows and one request per user. /history
+        takes an arbitrary ``since``, so it is the only way to honour days_back, and
+        one walk of it answers all three rankings.
+
+        Args:
+            cutoff: Oldest moment to include
+
+        Returns:
+            Ranked play statistics for the window
+
+        Raises:
+            requests.RequestException: On network failures
+            ValueError: On invalid API responses
+        """
+        self._request_count = 0
+        rows = self._iter_history_rows(cutoff)
+
+        titles: dict[str, TitlePlays] = {}
+        users: dict[str, UserPlays] = {}
+        total_watch_time_ms = 0
+
+        for row in rows:
+            watched_ms = max(0, row.duration_ms or 0)
+            total_watch_time_ms += watched_ms
+
+            key, label, rating_key = _title_bucket(row)
+            title_entry = titles.get(key)
+            if title_entry is None:
+                title_entry = TitlePlays(title=label, plays=0, watch_time_ms=0)
+                if rating_key:
+                    title_entry["rating_key"] = rating_key
+                if row.server_type:
+                    title_entry["server_type"] = row.server_type
+                titles[key] = title_entry
+            title_entry["plays"] += 1
+            title_entry["watch_time_ms"] += watched_ms
+
+            username = (row.user.username if row.user else None) or "Unknown"
+            user_key = (row.user.id if row.user else None) or username
+            user_entry = users.get(user_key)
+            if user_entry is None:
+                user_entry = UserPlays(username=username, plays=0, watch_time_ms=0)
+                users[user_key] = user_entry
+            user_entry["plays"] += 1
+            user_entry["watch_time_ms"] += watched_ms
+
+        stats = PlayStats(
+            # Plays first, watch time as the tie-break, then the label so that two
+            # equally watched titles keep a stable order between runs rather than
+            # following dictionary insertion.
+            top_titles=sorted(titles.values(), key=lambda t: (-t["plays"], -t["watch_time_ms"], t["title"]))[
+                :PLAY_STATS_TOP_N
+            ],
+            top_users=sorted(users.values(), key=lambda u: (-u["plays"], -u["watch_time_ms"], u["username"]))[
+                :PLAY_STATS_TOP_N
+            ],
+            total_plays=len(rows),
+            total_watch_time_ms=total_watch_time_ms,
+        )
+        logger.info(
+            "Retrieved %d plays by %d viewer(s) from last %d days (%d API calls)",
+            len(rows),
+            len(users),
+            max(1, (datetime.now(cutoff.tzinfo) - cutoff).days),
+            self._request_count,
+        )
+        return stats
+
 
 def _parse_iso(value: str) -> datetime:
     """
@@ -604,3 +751,32 @@ def _split_into_bursts(episodes: list[TracearrLibraryItem]) -> list[list[Tracear
         else:
             bursts.append([episode])
     return bursts
+
+
+def _to_iso(value: datetime) -> str:
+    """Render a datetime the way Tracearr's ``since`` filter parses it."""
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _title_bucket(row: TracearrHistoryRow) -> tuple[str, str, str | None]:
+    """
+    Decide which ranking line a play belongs to.
+
+    Episodes collapse into their show, so a binged season reads as one entry rather
+    than crowding every other title out of the top five. Anything else counts under
+    its own title.
+
+    Args:
+        row: A play row
+
+    Returns:
+        (grouping key, display label, rating key for the deep link)
+    """
+    if row.media_type == "episode" and row.show_title:
+        return (
+            f"show:{row.grandparent_rating_key or row.show_title}",
+            row.show_title,
+            row.grandparent_rating_key,
+        )
+    label = f"{row.media_title} ({row.year})" if row.year else row.media_title
+    return (f"{row.media_type}:{row.rating_key or row.media_title}", label, row.rating_key)
