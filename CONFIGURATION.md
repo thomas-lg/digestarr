@@ -75,6 +75,7 @@ All fields are defined in `src/config.py`.
 | `log_level`            | string  | No               | `"INFO"`                | DEBUG, INFO, WARNING, ERROR, CRITICAL | Logging verbosity                                                  |
 | `initial_batch_size`   | integer | No               | Adaptive\*\*            | 1-10000                               | Tautulli API batch size override                                   |
 | `excluded_media_types` | list    | No               | `[]`                    | movie, show, season, episode, album, track | Media types omitted from the summary                          |
+| `include_play_stats`   | boolean | No               | `false`                 | -                                     | Add a play stats section (Tracearr only\*\*\*\*\*)                    |
 | `enable_healthcheck`   | boolean | No               | `false`                 | -                                     | Serve `GET /health` (scheduled mode only)                          |
 | `health_host`          | string  | No               | `"127.0.0.1"`           | non-empty                             | Interface the health endpoint binds to                             |
 | `health_port`          | integer | No               | `8080`                  | 1-65535                               | Port for the health endpoint                                       |
@@ -86,6 +87,8 @@ All fields are defined in `src/config.py`.
 \*\*\* Only the selected `media_source`'s credentials are required.
 
 \*\*\*\* Auto-detected via Tautulli only. Tracearr cannot report it, so set it explicitly there. A Tautulli install needs `tautulli_url` and `tautulli_api_key`; a Tracearr one needs `tracearr_url` and `tracearr_api_key`.
+
+\*\*\*\*\* Tracearr is the only source that reports watch history. With any other source the section is skipped and a warning is logged at startup; the rest of the digest is unaffected.
 
 ### Excluding media types
 
@@ -166,6 +169,34 @@ Two differences are worth knowing before switching:
   Neither is wrong, and the difference disappears at the next run once the whole
   import has aged out. It only affects items within minutes of the `days_back`
   boundary, so a schedule that runs less often than `days_back` rarely meets it.
+
+### Play stats
+
+`include_play_stats: true` adds a second Discord message to every run, covering the
+same `days_back` window as the summary: the most played titles, the most active
+viewers, and the total watch time across everyone.
+
+```yaml
+media_source: tracearr
+include_play_stats: true
+```
+
+**Tracearr only.** Watch history is not something the app reads from Tautulli, so the
+section is skipped — with a warning, not an error — when `media_source` is anything
+else. Nothing else about the run changes.
+
+A few details worth knowing:
+
+- **Episodes count under their show.** A binged season reads as one entry rather than
+  crowding every other title out of the ranking. Movies and tracks count under their
+  own title.
+- **A play is a resume chain, not a session.** Pausing a film over two evenings is one
+  play, and Tracearr already discards anything under two minutes.
+- **Watch time is time actually played**, not the runtime of what was started.
+- **Titles link back** to the media server, on the same terms as the summary: Plex
+  needs `media_server_id` set, Jellyfin and Emby do not.
+- The rankings show a podium of three, and a week where nothing was watched still
+  gets the message, saying so.
 
 ### Health endpoint
 
@@ -306,6 +337,7 @@ Default `configs/config.yml` already uses `${VAR}` placeholders for all fields.
 | `LOG_LEVEL`           | `log_level`           | Logging level override       |
 | `INITIAL_BATCH_SIZE`  | `initial_batch_size`  | Batch size override          |
 | `EXCLUDED_MEDIA_TYPES` | `excluded_media_types` | Comma-separated types to omit |
+| `INCLUDE_PLAY_STATS`  | `include_play_stats`  | Play stats section (tracearr only) |
 | `MEDIA_SOURCE`        | `media_source`        | Required: tracearr or tautulli |
 | `TRACEARR_URL`        | `tracearr_url`        | Tracearr URL (required for tracearr) |
 | `TRACEARR_API_KEY`    | `tracearr_api_key`    | Tracearr public API token (required for tracearr) |
@@ -421,6 +453,7 @@ services:
 
 - **Category summaries:** Movies, TV Shows, TV Seasons, TV Episodes, Music Albums, Music Tracks, and Other items are each grouped into their own rich embed.
 - **Empty period:** if no items match the selected period, the app sends a single friendly "nothing new" embed.
+- **Play stats:** with `include_play_stats` enabled on a Tracearr source, one further embed follows the summary — most played titles, top viewers and total watch time. It is sent even when nothing was added, and says so when nothing was watched. See [Play stats](#play-stats).
 - **Message style:** empty-period title/body text is selected from an internal randomized message set.
 - **Large result sets:** content is trimmed/split into multiple messages to stay within Discord limits.
 - **Delivery behavior:** uses the same retry/timeout behavior described in [Retry Logic](#retry-logic).

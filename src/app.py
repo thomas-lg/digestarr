@@ -20,7 +20,7 @@ from config import (
 from discord_client import DiscordMediaItem, DiscordNotifier
 from health_server import record_run_completed, start_health_server
 from logging_config import setup_logging
-from media_source import MediaItem, MediaSourceClient, ServerIdentity
+from media_source import MediaItem, MediaSourceClient, PlayStatsSource, ServerIdentity
 from scheduler import run_scheduled
 from tautulli_client import TautulliClient
 from tracearr_client import TracearrClient
@@ -208,6 +208,78 @@ def _build_discord_payload(items: list[MediaItem]) -> list[DiscordMediaItem]:
     return discord_items
 
 
+def _resolve_media_server_id(config: Config, source: MediaSourceClient) -> str | None:
+    """
+    Return the server identifier deep links need, auto-detecting it when it is unset.
+
+    Args:
+        config: Application configuration
+        source: Media source client used for auto-detection
+
+    Returns:
+        The configured or detected identifier, None when neither is available
+    """
+    if config.media_server_id:
+        return config.media_server_id
+
+    logger.debug("media_server_id not configured, fetching from the media source...")
+    try:
+        server_info: ServerIdentity = source.get_server_identity()
+        media_server_id = server_info.get("machine_identifier")
+        if media_server_id:
+            logger.info("Auto-detected media server ID: %s", media_server_id)
+            return media_server_id
+        logger.warning("Could not auto-detect Plex Server ID from Tautulli")
+    except requests.RequestException as e:
+        logger.warning("Network error while fetching Plex Server ID: %s", e)
+    except (ValueError, RuntimeError) as e:
+        logger.warning("Invalid response from Tautulli: %s", e)
+    return None
+
+
+def _send_play_stats(config: Config, source: MediaSourceClient) -> None:
+    """
+    Fetch and send the play stats section, if the source can report one.
+
+    Never fatal: the section is an extra on top of the summary, so a source that
+    cannot serve it, or a call that fails, leaves the rest of the run untouched.
+
+    Args:
+        config: Application configuration
+        source: Media source client the summary was built from
+    """
+    if not isinstance(source, PlayStatsSource):
+        logger.warning(
+            "include_play_stats is enabled but media_source '%s' reports no watch history; "
+            "skipping the play stats section",
+            config.media_source,
+        )
+        return
+
+    logger.info("Querying play statistics for the last %d days...", config.days_back)
+    try:
+        stats = source.get_play_stats(datetime.now(UTC) - timedelta(days=config.days_back))
+    except requests.RequestException as e:
+        logger.error("Network error while fetching play statistics: %s", e)
+        return
+    except ValueError as e:
+        logger.error("Invalid response while fetching play statistics: %s", e)
+        return
+    except Exception as e:
+        logger.exception("Unexpected error while fetching play statistics: %s", e)
+        return
+
+    webhook_url = config.discord_webhook_url
+    if webhook_url is None:  # pragma: no cover - guarded by the caller
+        return
+
+    # The configured id, not a resolved one: only Tracearr reports play statistics and
+    # it never reports a server identity, so auto-detection here could only repeat the
+    # summary's failed lookup and log its warning a second time.
+    notifier = DiscordNotifier(webhook_url, config.media_server_url, config.media_server_id)
+    notifier.send_play_stats(stats, config.days_back)
+
+
 def _send_discord_notification(
     config: Config,
     source: MediaSourceClient,
@@ -231,22 +303,7 @@ def _send_discord_notification(
     """
     logger.debug("Discord webhook URL configured, sending notification...")
     try:
-        media_server_id = config.media_server_id
-
-        # Auto-fetch the server identifier from the source when not provided
-        if not media_server_id:
-            logger.debug("media_server_id not configured, fetching from the media source...")
-            try:
-                server_info: ServerIdentity = source.get_server_identity()
-                media_server_id = server_info.get("machine_identifier")
-                if media_server_id:
-                    logger.info("Auto-detected media server ID: %s", media_server_id)
-                else:
-                    logger.warning("Could not auto-detect Plex Server ID from Tautulli")
-            except requests.RequestException as e:
-                logger.warning("Network error while fetching Plex Server ID: %s", e)
-            except (ValueError, RuntimeError) as e:
-                logger.warning("Invalid response from Tautulli: %s", e)
+        media_server_id = _resolve_media_server_id(config, source)
 
         webhook_url = config.discord_webhook_url
         if webhook_url is None:
@@ -304,6 +361,8 @@ def run_summary(config: Config) -> int:
 
     if config.discord_webhook_url:
         exit_code = _send_discord_notification(config, source, discord_items, config.days_back, len(items))
+        if config.include_play_stats:
+            _send_play_stats(config, source)
     else:
         logger.debug("No Discord webhook URL configured, skipping Discord notification")
         exit_code = 0
