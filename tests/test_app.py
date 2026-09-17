@@ -16,6 +16,7 @@ from src.app import (
     _format_display_title,
     _get_config_path,
     _send_discord_notification,
+    _send_play_stats,
     main,
     run_summary,
 )
@@ -1281,3 +1282,202 @@ class TestBuildMediaSource:
             )
 
         assert "cannot auto-detect the media server id" in caplog.text
+
+
+class TestSendPlayStats:
+    """Tests for the optional play stats section."""
+
+    EMPTY_STATS = {"top_titles": [], "top_users": [], "total_plays": 0, "total_watch_time_ms": 0}
+
+    @staticmethod
+    def _config(**overrides):
+        base = {
+            "media_source": "tracearr",
+            "tracearr_url": "http://tracearr:3000",
+            "tracearr_api_key": "trr_pub_x",
+            "media_server_id": "srv",
+            "run_once": True,
+            "discord_webhook_url": "https://discord.example/webhook",
+            "include_play_stats": True,
+        }
+        base.update(overrides)
+        return Config.model_validate(base)
+
+    class _StatsSource:
+        """A media source that can also answer for play statistics."""
+
+        def __init__(self, stats=None, error=None):
+            self.stats = stats or TestSendPlayStats.EMPTY_STATS
+            self.error = error
+            self.cutoff = None
+
+        def get_items_added_since(self, cutoff):
+            return []
+
+        def get_server_identity(self):
+            return {}
+
+        def get_play_stats(self, cutoff):
+            self.cutoff = cutoff
+            if self.error:
+                raise self.error
+            return self.stats
+
+    class _PlainSource:
+        """A media source with no play stats capability."""
+
+        def get_items_added_since(self, cutoff):
+            return []
+
+        def get_server_identity(self):
+            return {}
+
+    @pytest.mark.unit
+    def test_stats_are_fetched_and_sent(self, monkeypatch):
+        """The window matches days_back and the notifier gets what the source returned."""
+        sent = {}
+
+        class StubNotifier:
+            def __init__(self, webhook_url, media_server_url, media_server_id):
+                sent["media_server_id"] = media_server_id
+
+            def send_play_stats(self, stats, days_back):
+                sent["stats"] = stats
+                sent["days_back"] = days_back
+                return True
+
+        monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
+        source = self._StatsSource(stats={**self.EMPTY_STATS, "total_plays": 3})
+
+        _send_play_stats(self._config(days_back=14), source)
+
+        assert sent["stats"]["total_plays"] == 3
+        assert sent["days_back"] == 14
+        assert sent["media_server_id"] == "srv"
+        assert (datetime.now(UTC) - source.cutoff).days == 14
+
+    @pytest.mark.unit
+    def test_a_source_without_the_capability_is_skipped(self, monkeypatch, caplog):
+        """Tautulli reports no watch history, so the section is skipped with a warning."""
+        monkeypatch.setattr(
+            "src.app.DiscordNotifier",
+            lambda *a, **kw: pytest.fail("the notifier should not be built"),
+        )
+        caplog.set_level("WARNING", logger="app")
+
+        _send_play_stats(self._config(), self._PlainSource())
+
+        assert "reports no watch history" in caplog.text
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (requests.RequestException("down"), "Network error while fetching play statistics"),
+            (ValueError("bad shape"), "Invalid response while fetching play statistics"),
+            (RuntimeError("boom"), "Unexpected error while fetching play statistics"),
+        ],
+    )
+    def test_a_failed_fetch_is_never_fatal(self, monkeypatch, caplog, error, expected):
+        """The section is an extra, so its failure leaves the rest of the run alone."""
+        monkeypatch.setattr(
+            "src.app.DiscordNotifier",
+            lambda *a, **kw: pytest.fail("the notifier should not be built"),
+        )
+        caplog.set_level("ERROR", logger="app")
+
+        _send_play_stats(self._config(), self._StatsSource(error=error))
+
+        assert expected in caplog.text
+
+    @pytest.mark.unit
+    def test_run_summary_sends_the_section_when_enabled(self, monkeypatch):
+        """run_summary should follow the summary with the stats message."""
+        calls = []
+
+        class StubNotifier:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def send_summary(self, media_items, days_back, total_count):
+                calls.append("summary")
+                return True
+
+            def send_play_stats(self, stats, days_back):
+                calls.append("stats")
+                return True
+
+        source = self._StatsSource()
+        monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
+        monkeypatch.setattr("src.app._build_media_source", lambda config: source)
+
+        assert run_summary(self._config()) == 0
+        assert calls == ["summary", "stats"]
+
+    @pytest.mark.unit
+    def test_run_summary_skips_the_section_when_disabled(self, monkeypatch):
+        """The flag is off by default, and nothing extra is sent."""
+        calls = []
+
+        class StubNotifier:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def send_summary(self, media_items, days_back, total_count):
+                calls.append("summary")
+                return True
+
+            def send_play_stats(self, stats, days_back):  # pragma: no cover - must not run
+                calls.append("stats")
+                return True
+
+        monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
+        monkeypatch.setattr("src.app._build_media_source", lambda config: self._StatsSource())
+
+        assert run_summary(self._config(include_play_stats=False)) == 0
+        assert calls == ["summary"]
+
+    @pytest.mark.unit
+    def test_no_webhook_means_no_stats_message(self, monkeypatch):
+        """Without a webhook there is nowhere to send either message."""
+        monkeypatch.setattr(
+            "src.app.DiscordNotifier",
+            lambda *a, **kw: pytest.fail("the notifier should not be built"),
+        )
+        monkeypatch.setattr("src.app._build_media_source", lambda config: self._StatsSource())
+
+        assert run_summary(self._config(discord_webhook_url=None)) == 0
+
+    @pytest.mark.unit
+    def test_the_server_id_is_not_resolved_a_second_time(self, monkeypatch, caplog):
+        """
+        Only Tracearr reports play statistics and it never reports a server identity,
+        so re-resolving here could only repeat the summary's failed lookup.
+        """
+        seen = {}
+
+        class StubNotifier:
+            def __init__(self, webhook_url, media_server_url, media_server_id):
+                seen["media_server_id"] = media_server_id
+
+            def send_play_stats(self, stats, days_back):
+                return True
+
+        class CountingSource(TestSendPlayStats._StatsSource):
+            def __init__(self):
+                super().__init__()
+                self.identity_calls = 0
+
+            def get_server_identity(self):
+                self.identity_calls += 1
+                return {}
+
+        monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
+        caplog.set_level("WARNING", logger="app")
+        source = CountingSource()
+
+        _send_play_stats(self._config(media_server_id=None), source)
+
+        assert source.identity_calls == 0
+        assert seen["media_server_id"] is None
+        assert "Could not auto-detect" not in caplog.text

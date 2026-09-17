@@ -2,12 +2,12 @@
 # Digestarr - Configuration File
 # =============================================================================
 #
-# MINIMAL CONFIGURATION: Only 2 fields are required!
-#   - tautulli_url
-#   - tautulli_api_key
+# MINIMAL CONFIGURATION: three fields, and two of them are your Tracearr details.
+#   - media_source     (tracearr recommended, tautulli for Plex-only installs)
+#   - tracearr_url + tracearr_api_key
 #
-# All other fields have smart defaults and work out of the box.
-# Uncomment optional fields ONLY if you want to override defaults.
+# Everything else has a working default. Override a field only when you want
+# something other than that default.
 #
 # For full configuration reference, see: CONFIGURATION.md#configuration-fields.
 #
@@ -16,16 +16,16 @@
 #
 # 1. Environment Variables (Recommended for container deployments):
 #    Set in your deployment environment file (example: docker-compose.yml):
-#    TAUTULLI_URL=http://tautulli:8181
-#    Reference in config.yml: tautulli_url: ${TAUTULLI_URL}
+#    TRACEARR_URL=http://tracearr:3000
+#    Reference in config.yml: tracearr_url: ${TRACEARR_URL}
 #
 # 2. Hardcoded Values (Simple for testing):
-#    tautulli_url: http://192.168.1.100:8181
+#    tracearr_url: http://192.168.1.100:3000
 #
 # 3. Docker Secrets (Best for production):
 #    Set in your deployment environment file (example: docker-compose.yml):
-#    TAUTULLI_API_KEY=/run/secrets/tautulli_api_key
-#    Reference in config.yml: tautulli_api_key: ${TAUTULLI_API_KEY}
+#    TRACEARR_API_KEY=/run/secrets/tracearr_api_key
+#    Reference in config.yml: tracearr_api_key: ${TRACEARR_API_KEY}
 #    The file content is automatically read.
 #
 # =============================================================================
@@ -34,16 +34,28 @@
 # REQUIRED FIELDS
 # -----------------------------------------------------------------------------
 
-# Where recently added media is read from. Required - there is no default.
-# tracearr (recommended): Plex, Jellyfin and Emby. tautulli: Plex only.
+# Where recently added media is read from: tracearr or tautulli.
+# Required, and deliberately without a default - the source decides which
+# credentials below matter, so the choice is yours to state.
+#   tracearr (recommended): Plex, Jellyfin and Emby, and where new features go.
+#   tautulli: Plex only, in maintenance - fixes yes, new capabilities no.
 media_source: ${MEDIA_SOURCE}
 
-# Tracearr instance URL and public API token (required when media_source is tracearr)
+# -----------------------------------------------------------------------------
+# Tracearr (recommended) - required when media_source is tracearr
+# -----------------------------------------------------------------------------
+
+# Tracearr instance URL and public API token
+# Examples: http://tracearr:3000, http://192.168.1.100:3000
 # The token is created in Tracearr's UI and looks like trr_pub_...
 # Note: Tracearr cannot report the Plex machine identifier, so set media_server_id
 # below if you want clickable media links.
 tracearr_url: ${TRACEARR_URL}
 tracearr_api_key: ${TRACEARR_API_KEY}
+
+# -----------------------------------------------------------------------------
+# Tautulli (Plex only, maintenance mode) - required when media_source is tautulli
+# -----------------------------------------------------------------------------
 
 # Tautulli instance URL
 # Examples: http://localhost:8181, http://tautulli:8181, https://tautulli.example.com
@@ -85,12 +97,14 @@ run_once: ${RUN_ONCE}
 # Default: None (disabled)
 discord_webhook_url: ${DISCORD_WEBHOOK_URL}
 
-# Plex server URL for generating clickable media links
+# Base URL of the media server the clickable links point at: Plex, Jellyfin or Emby
+# Examples: http://plex:32400, http://jellyfin:8096, http://emby:8096
 # Default: https://app.plex.tv
 media_server_url: ${MEDIA_SERVER_URL}
 
-# Plex server machine identifier
-# Default: Auto-detected via Tautulli
+# Media server identifier, used to build the links
+# Required for Plex links, optional for Jellyfin and Emby
+# Default: auto-detected, but only when media_source is tautulli
 media_server_id: ${MEDIA_SERVER_ID}
 
 # Logging level
@@ -105,6 +119,13 @@ log_level: ${LOG_LEVEL}
 #     - track
 #     - album
 excluded_media_types: ${EXCLUDED_MEDIA_TYPES}
+
+# Add a play stats section to the digest: most played titles, top users and total
+# watch time over the same window as the summary.
+# Requires media_source: tracearr - Tautulli reports no watch history here, and the
+# section is skipped (with a warning) on any other source.
+# Default: false
+include_play_stats: ${INCLUDE_PLAY_STATS}
 
 # HTTP health endpoint for container liveness probes (scheduled mode only)
 # Default: false (no socket is opened)

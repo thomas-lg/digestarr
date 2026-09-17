@@ -1,5 +1,6 @@
 """Unit tests for configuration module."""
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -1087,3 +1088,76 @@ class TestMediaSourceSelection:
         """An unset variable for the source actually in use must be reported."""
         with pytest.raises(ValidationError, match="Unresolved environment variable"):
             Config(media_source="tracearr", tracearr_url="${TRACEARR_URL}", tracearr_api_key="k")
+
+
+class TestIncludePlayStats:
+    """Tests for the play stats flag and the source it depends on."""
+
+    @staticmethod
+    def _config(**overrides):
+        base = {
+            "media_source": "tracearr",
+            "tracearr_url": "http://tracearr:3000",
+            "tracearr_api_key": "trr_pub_x",
+            "run_once": True,
+        }
+        base.update(overrides)
+        return Config.model_validate(base)
+
+    @pytest.mark.unit
+    def test_the_section_is_off_by_default(self):
+        """An existing install should see no change until it opts in."""
+        assert self._config().include_play_stats is False
+
+    @pytest.mark.unit
+    def test_tracearr_enables_it_without_complaint(self, caplog):
+        """The supported source should produce no warning."""
+        with caplog.at_level(logging.WARNING):
+            config = self._config(include_play_stats=True)
+
+        assert config.include_play_stats is True
+        assert "play stats" not in caplog.text
+
+    @pytest.mark.unit
+    def test_another_source_warns_instead_of_failing(self, caplog):
+        """
+        Only Tracearr reports watch history, but refusing to start over an optional
+        section would be a harsh way to learn that.
+        """
+        with caplog.at_level(logging.WARNING):
+            config = Config.model_validate(
+                {
+                    "media_source": "tautulli",
+                    "tautulli_url": "http://tautulli:8181",
+                    "tautulli_api_key": "secret",
+                    "run_once": True,
+                    "include_play_stats": True,
+                }
+            )
+
+        assert config.include_play_stats is True
+        assert "reports no watch history" in caplog.text
+
+    @pytest.mark.unit
+    def test_loading_announces_the_section(self, caplog):
+        """The startup log should say the digest will carry play stats."""
+        config_data = {
+            "media_source": "tracearr",
+            "tracearr_url": "http://tracearr:3000",
+            "tracearr_api_key": "trr_pub_x",
+            "run_once": True,
+            "include_play_stats": True,
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as handle:
+            yaml.dump(config_data, handle)
+            temp_path = handle.name
+
+        try:
+            with caplog.at_level(logging.INFO):
+                config = load_config(temp_path)
+        finally:
+            Path(temp_path).unlink()
+
+        assert config.include_play_stats is True
+        assert "Play stats section enabled" in caplog.text

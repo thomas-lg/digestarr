@@ -64,19 +64,20 @@ services:
     # -------------------------------------------------------------------------
     # NETWORKING
     # -------------------------------------------------------------------------
-    # This container must reach the Tautulli service by hostname.
-    # If Tautulli runs in a separate Compose project, attach this container to
-    # its network.  Example (replace <tautulli_project> with the actual name):
+    # This container must reach its media source (Tracearr or Tautulli) by
+    # hostname. If that service runs in a separate Compose project, attach this
+    # container to its network. Example (replace <source_project> with the
+    # actual name, e.g. tracearr):
     #
     #   networks:
-    #     - <tautulli_project>_default
+    #     - <source_project>_default
     #
     # networks:
-    #   <tautulli_project>_default:
+    #   <source_project>_default:
     #     external: true
     #
-    # If Tautulli is in the SAME Compose file, add both services to a shared
-    # network instead and remove the block above.
+    # If the media source is in the SAME Compose file, add both services to a
+    # shared network instead and remove the block above.
     # -------------------------------------------------------------------------
 
     logging:

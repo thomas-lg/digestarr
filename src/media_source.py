@@ -3,10 +3,14 @@
 Tautulli is one implementation; anything able to answer "what was added since this
 moment" can be another. The item shape is deliberately the one the summary needs, so
 a backend is responsible for translating its own payloads into it.
+
+Reporting *what was watched* is a separate, optional capability (``PlayStatsSource``):
+the required contract stays narrow so a backend that cannot serve play history is not
+made to stub it.
 """
 
 from datetime import datetime
-from typing import Protocol, TypedDict
+from typing import NotRequired, Protocol, TypedDict, runtime_checkable
 
 
 class MediaItem(TypedDict, total=False):
@@ -47,4 +51,48 @@ class MediaSourceClient(Protocol):
 
     def get_server_identity(self) -> ServerIdentity:
         """Return the backing server's identity, empty if unavailable."""
+        ...  # pragma: no cover
+
+
+class TitlePlays(TypedDict):
+    """One title in the most-played ranking, already collapsed to its display level."""
+
+    plays: int
+    rating_key: NotRequired[str]
+    # Which media server the title lives on, deciding the shape of the deep link.
+    server_type: NotRequired[str]
+    title: str
+    watch_time_ms: int
+
+
+class UserPlays(TypedDict):
+    """One viewer's activity over the window."""
+
+    plays: int
+    username: str
+    watch_time_ms: int
+
+
+class PlayStats(TypedDict):
+    """What was watched over a window, aggregated the way the digest renders it."""
+
+    top_titles: list[TitlePlays]
+    top_users: list[UserPlays]
+    total_plays: int
+    total_watch_time_ms: int
+
+
+@runtime_checkable
+class PlayStatsSource(Protocol):
+    """
+    Optional capability: a source that can also report what was *watched*.
+
+    Deliberately separate from MediaSourceClient rather than a third method on it.
+    Play history is not something every backend can answer well, and a backend that
+    cannot should not be forced to stub it — ``isinstance(source, PlayStatsSource)``
+    is what decides whether the digest gets a play stats section.
+    """
+
+    def get_play_stats(self, cutoff: datetime) -> PlayStats:
+        """Return play activity at or after ``cutoff``, ranked highest first."""
         ...  # pragma: no cover

@@ -25,6 +25,7 @@ class ConfigInput(TypedDict, total=False):
     log_level: str
     initial_batch_size: int | None
     excluded_media_types: list[str]
+    include_play_stats: bool
     enable_healthcheck: bool
     health_host: str
     health_port: int
@@ -326,6 +327,11 @@ class Config(BaseModel):
                 normalised.append(candidate)
         return normalised
 
+    include_play_stats: bool = Field(
+        False,
+        description=(f"Add a play stats section to the digest (requires media_source: {MEDIA_SOURCE_TRACEARR})"),
+    )
+
     # Health Endpoint (Optional, scheduled mode only)
     enable_healthcheck: bool = Field(False, description="Serve GET /health for container liveness probes")
     health_host: str = Field(
@@ -400,6 +406,24 @@ class Config(BaseModel):
                     "value in config.yml."
                 )
 
+        return self
+
+    @model_validator(mode="after")
+    def warn_play_stats_unsupported(self) -> Config:
+        """
+        Warn rather than fail when play stats are asked of a source that lacks them.
+
+        Only Tracearr reports watch history, but refusing to start over an optional
+        digest section would be a harsh way to learn that — the section is skipped
+        and the rest of the run goes ahead.
+        """
+        if self.include_play_stats and self.media_source != MEDIA_SOURCE_TRACEARR:
+            logger.warning(
+                "include_play_stats is enabled but media_source is '%s', which reports no "
+                "watch history; the play stats section will be skipped. Switch to '%s' to use it.",
+                self.media_source,
+                MEDIA_SOURCE_TRACEARR,
+            )
         return self
 
 
@@ -564,6 +588,8 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Config:
         "configured" if config.discord_webhook_url else "not configured",
         config.cron_schedule if not config.run_once else "N/A (run_once)",
     )
+    if config.include_play_stats:
+        logger.info("Play stats section enabled")
     if config.excluded_media_types:
         logger.info("Excluding media types from the summary: %s", ", ".join(config.excluded_media_types))
 

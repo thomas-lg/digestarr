@@ -9,7 +9,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import requests
 
-from src.tracearr_client import BURST_GAP_SECONDS, PAGE_SIZE, TracearrClient
+from src.media_source import PlayStatsSource
+from src.tracearr_client import (
+    BURST_GAP_SECONDS,
+    MAX_PAGES,
+    PAGE_SIZE,
+    PLAY_STATS_TOP_N,
+    TracearrClient,
+)
 
 SHOW_ID = "ec84c5ac-5fad-4656-b9c5-cad53644b1bb"
 SEASON1_ID = "01ce04c1-b580-4e2c-bd2b-64480085d568"
@@ -994,3 +1001,337 @@ class TestServerTypePropagation:
 
         assert items[0]["media_type"] == "season"
         assert "server_type" not in items[0]
+
+
+def _play(
+    media_title="Un film",
+    media_type="movie",
+    started=None,
+    duration_ms=3_600_000,
+    username="thomas",
+    user_id="u-1",
+    show_title=None,
+    rating_key=None,
+    grandparent_rating_key=None,
+    year=None,
+    server_type="plex",
+):
+    """Build a /history row in the shape Tracearr returns."""
+    return {
+        "id": f"chain-{media_title}-{started}",
+        "media_type": media_type,
+        "media_title": media_title,
+        "show_title": show_title,
+        "year": year,
+        "duration_ms": duration_ms,
+        "server_type": server_type,
+        "rating_key": rating_key,
+        "grandparent_rating_key": grandparent_rating_key,
+        "started_at": _iso(started or datetime.now(UTC)),
+        "user": {"id": user_id, "username": username},
+    }
+
+
+class HistoryTransport:
+    """Serves canned /history pages and records the query parameters seen."""
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.params_seen = []
+        self.calls = []
+
+    def __call__(self, url, headers=None, params=None, timeout=None):
+        path = url.split("/api/v2/public", 1)[1]
+        self.calls.append(path)
+        self.params_seen.append(params or {})
+        cursor = (params or {}).get("cursor")
+        index = 0 if cursor is None else int(cursor)
+        return _Response(self.pages[index])
+
+
+def _page(rows, next_cursor=None):
+    return {"data": rows, "meta": {"nextCursor": next_cursor, "pageSize": PAGE_SIZE}}
+
+
+class TestPlayStats:
+    """Tests for aggregating Tracearr's play history."""
+
+    @pytest.mark.unit
+    def test_window_is_pushed_to_the_api(self, monkeypatch):
+        """The cutoff should travel as 'since', so Tracearr does the filtering."""
+        transport = HistoryTransport([_page([_play()])])
+        client = _client(transport, monkeypatch)
+        cutoff = _cutoff()
+
+        client.get_play_stats(cutoff)
+
+        assert transport.calls == ["/history"]
+        assert transport.params_seen[0]["since"] == _iso(cutoff)
+        assert transport.params_seen[0]["pageSize"] == PAGE_SIZE
+
+    @pytest.mark.unit
+    def test_server_id_scopes_the_query(self, monkeypatch):
+        """A multi-server instance should be narrowed to the configured server."""
+        transport = HistoryTransport([_page([_play()])])
+        client = _client(transport, monkeypatch, server_id="srv-1")
+
+        client.get_play_stats(_cutoff())
+
+        assert transport.params_seen[0]["server_id"] == "srv-1"
+
+    @pytest.mark.unit
+    def test_totals_count_every_play_and_its_watch_time(self, monkeypatch):
+        """Totals should cover the whole window, not just the ranked entries."""
+        rows = [_play(media_title=f"Film {index}", duration_ms=1_800_000) for index in range(8)]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == 8
+        assert stats["total_watch_time_ms"] == 8 * 1_800_000
+        assert len(stats["top_titles"]) == PLAY_STATS_TOP_N
+
+    @pytest.mark.unit
+    def test_episodes_are_counted_under_their_show(self, monkeypatch):
+        """A binged season should read as one entry rather than five episodes."""
+        rows = [
+            _play(
+                media_title=f"Episode {index}",
+                media_type="episode",
+                show_title="House of the Dragon",
+                grandparent_rating_key="2947",
+                rating_key=str(3000 + index),
+                duration_ms=2_400_000,
+            )
+            for index in range(4)
+        ]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_titles"] == [
+            {
+                "title": "House of the Dragon",
+                "plays": 4,
+                "watch_time_ms": 4 * 2_400_000,
+                "rating_key": "2947",
+                "server_type": "plex",
+            }
+        ]
+
+    @pytest.mark.unit
+    def test_movies_keep_their_own_title_and_year(self, monkeypatch):
+        """A movie should be ranked under its own title, disambiguated by year."""
+        rows = [_play(media_title="Dune", year=2021, rating_key="4242")]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_titles"][0]["title"] == "Dune (2021)"
+        assert stats["top_titles"][0]["rating_key"] == "4242"
+
+    @pytest.mark.unit
+    def test_an_episode_without_a_show_title_stands_alone(self, monkeypatch):
+        """Nothing to group by means the episode is ranked as itself."""
+        rows = [_play(media_title="Un episode", media_type="episode", show_title=None)]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_titles"][0]["title"] == "Un episode"
+
+    @pytest.mark.unit
+    def test_viewers_are_ranked_by_plays(self, monkeypatch):
+        """Top users should be ordered by play count, with their watch time."""
+        rows = [
+            _play(media_title="A", username="thomas", user_id="u-1", duration_ms=600_000),
+            _play(media_title="B", username="thomas", user_id="u-1", duration_ms=600_000),
+            _play(media_title="C", username="alex", user_id="u-2", duration_ms=1_200_000),
+        ]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_users"] == [
+            {"username": "thomas", "plays": 2, "watch_time_ms": 1_200_000},
+            {"username": "alex", "plays": 1, "watch_time_ms": 1_200_000},
+        ]
+
+    @pytest.mark.unit
+    def test_ties_break_on_watch_time_then_label(self, monkeypatch):
+        """Equal play counts should still produce a stable order between runs."""
+        rows = [
+            _play(media_title="Zebra", duration_ms=600_000),
+            _play(media_title="Alpha", duration_ms=600_000),
+            _play(media_title="Beta", duration_ms=900_000),
+        ]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert [title["title"] for title in stats["top_titles"]] == ["Beta", "Alpha", "Zebra"]
+
+    @pytest.mark.unit
+    def test_a_nameless_viewer_is_reported_as_unknown(self, monkeypatch):
+        """Tracearr can null every name field on the viewer block."""
+        row = _play()
+        row["user"] = {"id": None, "username": None}
+        client = _client(HistoryTransport([_page([row])]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_users"][0]["username"] == "Unknown"
+
+    @pytest.mark.unit
+    def test_a_missing_viewer_block_is_tolerated(self, monkeypatch):
+        """A row without a user at all should not sink the run."""
+        row = _play()
+        del row["user"]
+        client = _client(HistoryTransport([_page([row])]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_users"][0]["username"] == "Unknown"
+
+    @pytest.mark.unit
+    def test_missing_and_negative_durations_count_as_nothing(self, monkeypatch):
+        """A play still counts even when Tracearr reports no duration for it."""
+        rows = [_play(media_title="A", duration_ms=None), _play(media_title="B", duration_ms=-5)]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == 2
+        assert stats["total_watch_time_ms"] == 0
+
+    @pytest.mark.unit
+    def test_an_empty_window_reports_zeroes(self, monkeypatch):
+        """Nothing watched is a valid answer, not an error."""
+        client = _client(HistoryTransport([_page([])]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats == {"top_titles": [], "top_users": [], "total_plays": 0, "total_watch_time_ms": 0}
+
+    @pytest.mark.unit
+    def test_pages_are_followed_to_the_end(self, monkeypatch):
+        """The walk should continue while Tracearr hands back a cursor."""
+        transport = HistoryTransport(
+            [
+                _page([_play(media_title="A")], next_cursor="1"),
+                _page([_play(media_title="B")], next_cursor=None),
+            ]
+        )
+        client = _client(transport, monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == 2
+        assert transport.params_seen[1]["cursor"] == "1"
+
+    @pytest.mark.unit
+    def test_paging_stops_at_the_page_cap(self, monkeypatch, caplog):
+        """An endless cursor should be abandoned rather than paged forever."""
+        transport = HistoryTransport([_page([_play()], next_cursor="0")] * (MAX_PAGES + 1))
+        client = _client(transport, monkeypatch)
+        caplog.set_level("WARNING")
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == MAX_PAGES
+        assert any("max pages" in record.message for record in caplog.records)
+
+    @pytest.mark.unit
+    def test_a_non_list_payload_is_rejected(self, monkeypatch):
+        """A shape the client cannot read should fail loudly."""
+        client = _client(HistoryTransport([{"data": {"nope": True}, "meta": {}}]), monkeypatch)
+
+        with pytest.raises(ValueError, match="Expected 'data' to be a list"):
+            client.get_play_stats(_cutoff())
+
+    @pytest.mark.unit
+    def test_a_malformed_row_is_rejected(self, monkeypatch):
+        """A row missing the fields the digest needs should fail validation."""
+        client = _client(HistoryTransport([_page([{"media_type": "movie"}])]), monkeypatch)
+
+        with pytest.raises(ValueError, match="Unexpected Tracearr response shape"):
+            client.get_play_stats(_cutoff())
+
+    @pytest.mark.unit
+    def test_the_client_satisfies_the_play_stats_capability(self, monkeypatch):
+        """The app decides on the capability, so the client must advertise it."""
+        client = _client(HistoryTransport([_page([])]), monkeypatch)
+
+        assert isinstance(client, PlayStatsSource)
+
+    @pytest.mark.unit
+    def test_a_title_without_a_server_type_omits_it(self, monkeypatch):
+        """No server type means no way to shape a link, so the key is left off."""
+        rows = [_play(media_title="Dune", server_type=None, rating_key="4242")]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert "server_type" not in stats["top_titles"][0]
+
+    @pytest.mark.unit
+    def test_rows_past_the_cutoff_are_dropped(self, monkeypatch):
+        """
+        The window is enforced again on our side, not trusted to `since` alone.
+
+        An unknown query parameter is usually dropped rather than refused, so a
+        backend that stopped honouring `since` would quietly inflate every figure.
+        """
+        now = datetime.now(UTC)
+        transport = HistoryTransport(
+            [
+                _page(
+                    [
+                        _play(media_title="Inside", started=now - timedelta(days=2)),
+                        _play(media_title="Ancient", started=now - timedelta(days=90)),
+                        _play(media_title="Never reached", started=now - timedelta(days=1)),
+                    ],
+                    next_cursor="1",
+                ),
+                _page([_play(media_title="Unvisited page")]),
+            ]
+        )
+        client = _client(transport, monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == 1
+        assert stats["top_titles"][0]["title"] == "Inside"
+        # The feed is newest first, so the first row past the cutoff ends the walk.
+        assert transport.calls == ["/history"]
+
+    @pytest.mark.unit
+    def test_server_type_is_taken_from_whichever_row_carries_it(self, monkeypatch):
+        """
+        A bucket whose earliest play reports no server type would otherwise be linked
+        as Plex, which is the default the notifier assumes.
+        """
+        rows = [
+            _play(
+                media_title="Un episode",
+                media_type="episode",
+                show_title="Severance",
+                grandparent_rating_key="77",
+                server_type=None,
+                rating_key="78",
+            ),
+            _play(
+                media_title="Un autre episode",
+                media_type="episode",
+                show_title="Severance",
+                grandparent_rating_key="77",
+                server_type="jellyfin",
+                rating_key="79",
+            ),
+        ]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_titles"][0]["server_type"] == "jellyfin"
+        assert stats["top_titles"][0]["rating_key"] == "77"
