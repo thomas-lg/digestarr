@@ -603,8 +603,12 @@ class TracearrClient:
         """
         Page /history for every play started at or after ``cutoff``.
 
-        The window is applied server-side through ``since``, so the walk ends when
-        Tracearr stops handing back a cursor rather than on a timestamp comparison.
+        The window is applied server-side through ``since``, and checked again here
+        against each row. Belt and braces on purpose: an unknown query parameter is
+        usually dropped rather than refused, so a backend that stopped honouring
+        ``since`` would quietly inflate every figure in the section instead of
+        failing. The feed is ordered newest first, so the first row past the cutoff
+        ends the walk.
 
         Args:
             cutoff: Oldest moment to include
@@ -627,11 +631,16 @@ class TracearrClient:
             if not isinstance(data, list):
                 raise ValueError("Expected 'data' to be a list in the /history payload")
 
+            reached_cutoff = False
             for raw in data:
-                rows.append(self._validate_response(cast(dict[str, object], raw), TracearrHistoryRow))
+                row = self._validate_response(cast(dict[str, object], raw), TracearrHistoryRow)
+                if _parse_iso(row.started_at) < cutoff:
+                    reached_cutoff = True
+                    break
+                rows.append(row)
 
             cursor = (payload.get("meta") or {}).get("nextCursor")
-            if not cursor or not data:
+            if reached_cutoff or not cursor or not data:
                 break
         else:
             logger.warning("Reached max pages (%d) walking /history; using what was collected", MAX_PAGES)
@@ -673,11 +682,14 @@ class TracearrClient:
             title_entry = titles.get(key)
             if title_entry is None:
                 title_entry = TitlePlays(title=label, plays=0, watch_time_ms=0)
-                if rating_key:
-                    title_entry["rating_key"] = rating_key
-                if row.server_type:
-                    title_entry["server_type"] = row.server_type
                 titles[key] = title_entry
+            # Taken from whichever row first carries them rather than from the first
+            # row alone: a bucket whose earliest play reports no server type would
+            # otherwise be linked as Plex, which is the default the notifier assumes.
+            if rating_key and "rating_key" not in title_entry:
+                title_entry["rating_key"] = rating_key
+            if row.server_type and "server_type" not in title_entry:
+                title_entry["server_type"] = row.server_type
             title_entry["plays"] += 1
             title_entry["watch_time_ms"] += watched_ms
 

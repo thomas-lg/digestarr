@@ -1,10 +1,12 @@
 """Unit tests for Discord client size calculation logic."""
 
+import re
+
 import pytest
 import requests
 from discord_webhook import DiscordEmbed
 
-from src.discord_client import DiscordMediaItem, DiscordNotifier, _format_watch_time
+from src.discord_client import DiscordMediaItem, DiscordNotifier, _format_watch_time, _truncate_label
 from src.media_source import PlayStats
 
 
@@ -1318,6 +1320,35 @@ class TestPlayStatsEmbed:
             lambda self, stats, days: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         assert notifier.send_play_stats(self._stats(), days_back=7) is False
+
+    @pytest.mark.unit
+    def test_a_very_long_title_is_truncated_rather_than_cut_mid_link(self, notifier):
+        """A ranking line must never be sliced through its own markup."""
+        stats = self._stats(
+            top_titles=[{"title": "A" * 400, "plays": 2, "watch_time_ms": 60_000, "rating_key": "42"}],
+        )
+        embed = notifier._create_play_stats_embed(stats, days_back=7)
+        line = embed.fields[0]["value"]
+
+        assert "\u2026" in line
+        # The markdown link survives intact: a slice through it would render as text.
+        assert re.fullmatch(r"\S+ \[A+\u2026\]\(https://app\.plex\.tv/\S+\) \u2014 2 plays", line)
+        assert len(line) < notifier.MAX_FIELD_VALUE
+
+    @pytest.mark.unit
+    def test_a_very_long_username_is_truncated_too(self, notifier):
+        """The same cap applies to viewers, whose names come from the media server."""
+        stats = self._stats(top_users=[{"username": "u" * 400, "plays": 1, "watch_time_ms": 60_000}])
+        embed = notifier._create_play_stats_embed(stats, days_back=7)
+        line = embed.fields[1]["value"]
+
+        assert "\u2026**" in line
+        assert len(line) < notifier.MAX_FIELD_VALUE
+
+    @pytest.mark.unit
+    def test_a_label_within_the_cap_is_untouched(self, notifier):
+        """Truncation only bites on labels that would not fit."""
+        assert _truncate_label("The Boys", 150) == "The Boys"
 
 
 class TestFormatWatchTime:

@@ -1447,3 +1447,37 @@ class TestSendPlayStats:
         monkeypatch.setattr("src.app._build_media_source", lambda config: self._StatsSource())
 
         assert run_summary(self._config(discord_webhook_url=None)) == 0
+
+    @pytest.mark.unit
+    def test_the_server_id_is_not_resolved_a_second_time(self, monkeypatch, caplog):
+        """
+        Only Tracearr reports play statistics and it never reports a server identity,
+        so re-resolving here could only repeat the summary's failed lookup.
+        """
+        seen = {}
+
+        class StubNotifier:
+            def __init__(self, webhook_url, media_server_url, media_server_id):
+                seen["media_server_id"] = media_server_id
+
+            def send_play_stats(self, stats, days_back):
+                return True
+
+        class CountingSource(TestSendPlayStats._StatsSource):
+            def __init__(self):
+                super().__init__()
+                self.identity_calls = 0
+
+            def get_server_identity(self):
+                self.identity_calls += 1
+                return {}
+
+        monkeypatch.setattr("src.app.DiscordNotifier", StubNotifier)
+        caplog.set_level("WARNING", logger="app")
+        source = CountingSource()
+
+        _send_play_stats(self._config(media_server_id=None), source)
+
+        assert source.identity_calls == 0
+        assert seen["media_server_id"] is None
+        assert "Could not auto-detect" not in caplog.text

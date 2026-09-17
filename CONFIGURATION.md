@@ -86,9 +86,9 @@ All fields are defined in `src/config.py`.
 
 \*\*\* Only the selected `media_source`'s credentials are required.
 
-\*\*\*\*\* Tracearr is the only source that reports watch history. With any other source the section is skipped and a warning is logged at startup; the rest of the digest is unaffected.
-
 \*\*\*\* Auto-detected via Tautulli only. Tracearr cannot report it, so set it explicitly there. A Tautulli install needs `tautulli_url` and `tautulli_api_key`; a Tracearr one needs `tracearr_url` and `tracearr_api_key`.
+
+\*\*\*\*\* Tracearr is the only source that reports watch history. With any other source the section is skipped and a warning is logged at startup; the rest of the digest is unaffected.
 
 ### Excluding media types
 

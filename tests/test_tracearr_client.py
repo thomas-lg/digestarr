@@ -1273,3 +1273,65 @@ class TestPlayStats:
         stats = client.get_play_stats(_cutoff())
 
         assert "server_type" not in stats["top_titles"][0]
+
+    @pytest.mark.unit
+    def test_rows_past_the_cutoff_are_dropped(self, monkeypatch):
+        """
+        The window is enforced again on our side, not trusted to `since` alone.
+
+        An unknown query parameter is usually dropped rather than refused, so a
+        backend that stopped honouring `since` would quietly inflate every figure.
+        """
+        now = datetime.now(UTC)
+        transport = HistoryTransport(
+            [
+                _page(
+                    [
+                        _play(media_title="Inside", started=now - timedelta(days=2)),
+                        _play(media_title="Ancient", started=now - timedelta(days=90)),
+                        _play(media_title="Never reached", started=now - timedelta(days=1)),
+                    ],
+                    next_cursor="1",
+                ),
+                _page([_play(media_title="Unvisited page")]),
+            ]
+        )
+        client = _client(transport, monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["total_plays"] == 1
+        assert stats["top_titles"][0]["title"] == "Inside"
+        # The feed is newest first, so the first row past the cutoff ends the walk.
+        assert transport.calls == ["/history"]
+
+    @pytest.mark.unit
+    def test_server_type_is_taken_from_whichever_row_carries_it(self, monkeypatch):
+        """
+        A bucket whose earliest play reports no server type would otherwise be linked
+        as Plex, which is the default the notifier assumes.
+        """
+        rows = [
+            _play(
+                media_title="Un episode",
+                media_type="episode",
+                show_title="Severance",
+                grandparent_rating_key="77",
+                server_type=None,
+                rating_key="78",
+            ),
+            _play(
+                media_title="Un autre episode",
+                media_type="episode",
+                show_title="Severance",
+                grandparent_rating_key="77",
+                server_type="jellyfin",
+                rating_key="79",
+            ),
+        ]
+        client = _client(HistoryTransport([_page(rows)]), monkeypatch)
+
+        stats = client.get_play_stats(_cutoff())
+
+        assert stats["top_titles"][0]["server_type"] == "jellyfin"
+        assert stats["top_titles"][0]["rating_key"] == "77"

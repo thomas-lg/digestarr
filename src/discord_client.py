@@ -11,7 +11,7 @@ from typing import Any, NotRequired, TypedDict, cast
 import requests
 from discord_webhook import DiscordEmbed, DiscordWebhook
 
-from media_source import PlayStats, TitlePlays
+from media_source import PlayStats, TitlePlays, UserPlays
 
 # Type definitions for Discord payloads
 
@@ -41,6 +41,22 @@ def _escape_title_markdown(text: str) -> str:
     """
     markdown_chars = r"([\\`*_~\[\]])"
     return re.sub(markdown_chars, r"\\\1", text)
+
+
+def _truncate_label(text: str, limit: int) -> str:
+    """
+    Shorten a ranking label that would not fit its line.
+
+    Args:
+        text: Title or username as the source reported it
+        limit: Longest result to return, ellipsis included
+
+    Returns:
+        The text unchanged, or cut to ``limit`` characters ending in an ellipsis
+    """
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
 
 
 def _plays_label(plays: int) -> str:
@@ -115,6 +131,10 @@ class DiscordNotifier:
 
     # Position markers for the play stats rankings, one per podium place
     RANK_MARKERS = ["🥇", "🥈", "🥉"]
+
+    # Longest title or username a ranking line shows. Keeps a podium comfortably
+    # inside MAX_FIELD_VALUE, so a line is never cut mid-link into visible markup.
+    MAX_RANK_LABEL = 150
 
     # Friendly empty-state messages when no new media is found
     NO_NEW_TITLES = [
@@ -359,7 +379,7 @@ class DiscordNotifier:
                 name="👤 Top users",
                 value=self._fit_lines(
                     [
-                        f"{marker} **{_escape_title_markdown(user['username'])}** — "
+                        f"{marker} {self._stats_user(user)} — "
                         f"{_plays_label(user['plays'])} ({_format_watch_time(user['watch_time_ms'])})"
                         for marker, user in zip(self.RANK_MARKERS, stats["top_users"], strict=False)
                     ]
@@ -378,10 +398,16 @@ class DiscordNotifier:
 
     def _stats_title(self, title: TitlePlays) -> str:
         """Render a ranked title, linked back to its media server when possible."""
-        safe_title = _escape_title_markdown(title["title"])
+        # Truncated before escaping: cutting afterwards could strip a backslash from
+        # its own escaped character and change what the title renders as.
+        safe_title = _escape_title_markdown(_truncate_label(title["title"], self.MAX_RANK_LABEL))
         rating_key = title.get("rating_key")
         link_url = self._build_deep_link(title.get("server_type", "plex"), rating_key) if rating_key else None
         return f"[{safe_title}]({link_url})" if link_url else f"**{safe_title}**"
+
+    def _stats_user(self, user: UserPlays) -> str:
+        """Render a ranked viewer, truncated like a title so the line always fits."""
+        return f"**{_escape_title_markdown(_truncate_label(user['username'], self.MAX_RANK_LABEL))}**"
 
     def _fit_lines(self, lines: list[str]) -> str:
         """

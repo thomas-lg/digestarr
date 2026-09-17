@@ -273,7 +273,10 @@ def _send_play_stats(config: Config, source: MediaSourceClient) -> None:
     if webhook_url is None:  # pragma: no cover - guarded by the caller
         return
 
-    notifier = DiscordNotifier(webhook_url, config.media_server_url, _resolve_media_server_id(config, source))
+    # The configured id, not a resolved one: only Tracearr reports play statistics and
+    # it never reports a server identity, so auto-detection here could only repeat the
+    # summary's failed lookup and log its warning a second time.
+    notifier = DiscordNotifier(webhook_url, config.media_server_url, config.media_server_id)
     notifier.send_play_stats(stats, config.days_back)
 
 
