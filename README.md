@@ -148,6 +148,17 @@ That's it! On first run, the entrypoint automatically creates `config.yml` from 
 
 **Done!** Everything else is automatic - appdata, config, weekly schedule (Sundays 4 PM), PUID/PGID (99/100).
 
+### Optional: keep your API key out of the container config
+
+The template ships a **Secrets** path (advanced view), mounted read-only at `/run/secrets`. Point it at a folder on your server, drop your key in a file there, and give the key field the file path instead of the key itself:
+
+1. On your server: `mkdir -p /mnt/user/appdata/digestarr/secrets`
+2. Put the token in `/mnt/user/appdata/digestarr/secrets/tracearr_api_key` (no trailing newline needed)
+3. In the template, set **Secrets** to that folder
+4. Set **TRACEARR_API_KEY** to `/run/secrets/tracearr_api_key`
+
+Any value starting with `/` is read as a file, so this works for **TAUTULLI_API_KEY** and **DISCORD_WEBHOOK_URL** too. A required secret file that is missing, unreadable or empty fails at startup rather than silently. See [Docker Secrets](CONFIGURATION.md#docker-secrets).
+
 ## Execution Modes
 
 The application supports two execution modes:
