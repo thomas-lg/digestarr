@@ -65,11 +65,13 @@ Run mypy.
 
 ### 📦 `compile-deps.sh` - Regenerate Lockfiles
 
-Recompile `requirements.lock` and `requirements-dev.lock`.
+Recompile `requirements.txt` and `requirements-dev.txt`.
 
-Runtime constraints live in `pyproject.toml` (`[project].dependencies`), which is the
-input for both locks; `requirements-dev.txt` adds dev-only tooling on top. Run this
-after modifying either file and commit the updated lockfiles.
+Runtime constraints live in `requirements.in`, which `pyproject.toml` reads via
+`[tool.setuptools.dynamic]`; `requirements-dev.in` adds dev-only tooling on top and
+pulls `requirements.in` in with `-r`. Each lock is compiled from exactly one `.in`
+file — see the header of `compile-deps.sh` before changing that. Run this after
+modifying either input and commit the updated lockfiles.
 
 ```bash
 ./scripts/compile-deps.sh

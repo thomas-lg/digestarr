@@ -100,7 +100,7 @@ Host-native development is optional and not the primary workflow. If you use it,
 Install all dependencies:
 
 ```bash
-pip install -r requirements-dev.lock
+pip install -r requirements-dev.txt
 ```
 
 Copy the example environment file and fill in your values:
@@ -161,7 +161,7 @@ Before submitting:
    ./scripts/test.sh
    ```
 
-4. If you changed the dependencies in `pyproject.toml`, or `requirements-dev.txt`, regenerate the lockfiles and commit them:
+4. If you changed the dependencies in `requirements.in` or `requirements-dev.in`, regenerate the lockfiles and commit them:
 
    ```bash
    ./scripts/compile-deps.sh
