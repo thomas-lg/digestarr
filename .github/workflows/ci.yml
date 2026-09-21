@@ -93,6 +93,21 @@ jobs:
             exit 1
           fi
 
+      # Each lock preserves its own pins on recompilation, so the step above would not
+      # notice the two drifting apart — tests would then run against a different
+      # runtime tree than the one the production image ships.
+      - name: Check both lockfiles agree on shared packages
+        run: |
+          pins() { grep -E '^[A-Za-z0-9]' "$1" | sed 's/==/ /' | sort; }
+          mismatch=$(join <(pins requirements.txt) <(pins requirements-dev.txt) | awk '$2 != $3')
+          if [ -n "$mismatch" ]; then
+            echo "::error::requirements.txt and requirements-dev.txt pin different versions of the same package."
+            echo "$mismatch" | while read -r name runtime dev; do
+              echo "::error::$name: requirements.txt has $runtime, requirements-dev.txt has $dev"
+            done
+            exit 1
+          fi
+
   tests:
     needs: build-devcontainer
     runs-on: ubuntu-latest

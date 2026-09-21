@@ -20,6 +20,11 @@
 #      single source file. Passing a second input here (say pyproject.toml) would make
 #      its command differ from ours, and it would silently drop everything that input
 #      contributed.
+#
+# A third property is outside our control: Dependabot compiles with its own pip-tools,
+# the CI recheck uses the one pinned in requirements-dev.txt. A pip-tools release that
+# changes the header or annotation format can therefore desync a Dependabot PR from the
+# CI recheck. If a pip-tools bump ever fails this way, recompile it by hand once.
 
 set -e
 
