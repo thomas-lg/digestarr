@@ -83,8 +83,8 @@ jobs:
       - name: Check lockfiles are up to date
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer sh -c "
-            pip-compile pyproject.toml --output-file requirements.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
-            pip-compile pyproject.toml requirements-dev.in --output-file requirements-dev.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache
+            pip-compile requirements.in --output-file requirements.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
+            pip-compile requirements-dev.in --output-file requirements-dev.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache
           "
           if ! git diff --exit-code requirements.txt requirements-dev.txt; then
             echo ""

@@ -345,7 +345,8 @@ Script reference: [scripts/README.md](scripts/README.md)
 ├── entrypoint.sh # Container entrypoint script
 ├── my-digestarr.xml # Unraid template
 ├── pyproject.toml # Python project configuration
-├── requirements-dev.in # Development & testing dependencies (runtime deps live in pyproject.toml)
+├── requirements.in # Runtime dependencies (read by pyproject.toml, source of truth)
+├── requirements-dev.in # Development & testing dependencies
 ├── requirements-dev.txt # Compiled lockfile for dev dependencies
 ├── requirements.txt # Compiled lockfile for runtime dependencies
 └── README.md

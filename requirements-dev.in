@@ -1,6 +1,9 @@
 # Development dependencies.
-# Runtime deps are NOT listed here: they live in pyproject.toml and are pulled in
-# by compile-deps.sh, which passes pyproject.toml alongside this file to pip-compile.
+# Runtime deps are NOT listed here: they live in requirements.in and are pulled in by
+# the -r below, which keeps this file a complete pip-compile input on its own.
+# See scripts/compile-deps.sh for why that matters.
+
+-r requirements.in
 
 # Build tools
 setuptools-scm>=10.0.5
