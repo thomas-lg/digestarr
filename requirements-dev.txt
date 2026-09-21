@@ -85,7 +85,7 @@ requests==2.34.2
     # via
     #   -r requirements.in
     #   discord-webhook
-ruff==0.16.7
+ruff==0.16.8
     # via -r requirements-dev.in
 setuptools-scm==10.2.1
     # via -r requirements-dev.in
