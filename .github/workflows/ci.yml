@@ -83,13 +83,28 @@ jobs:
       - name: Check lockfiles are up to date
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer sh -c "
-            pip-compile pyproject.toml --output-file requirements.lock --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
-            pip-compile pyproject.toml requirements-dev.txt --output-file requirements-dev.lock --annotate --quiet --strip-extras --cache-dir /tmp/.cache
+            pip-compile requirements.in --output-file requirements.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
+            pip-compile requirements-dev.in --output-file requirements-dev.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache
           "
-          if ! git diff --exit-code requirements.lock requirements-dev.lock; then
+          if ! git diff --exit-code requirements.txt requirements-dev.txt; then
             echo ""
             echo "::error::Lockfiles are out of sync with requirements files."
             echo "::error::Run './scripts/compile-deps.sh' locally and commit the updated lockfiles."
+            exit 1
+          fi
+
+      # Each lock preserves its own pins on recompilation, so the step above would not
+      # notice the two drifting apart — tests would then run against a different
+      # runtime tree than the one the production image ships.
+      - name: Check both lockfiles agree on shared packages
+        run: |
+          pins() { grep -E '^[A-Za-z0-9]' "$1" | sed 's/==/ /' | sort; }
+          mismatch=$(join <(pins requirements.txt) <(pins requirements-dev.txt) | awk '$2 != $3')
+          if [ -n "$mismatch" ]; then
+            echo "::error::requirements.txt and requirements-dev.txt pin different versions of the same package."
+            echo "$mismatch" | while read -r name runtime dev; do
+              echo "::error::$name: requirements.txt has $runtime, requirements-dev.txt has $dev"
+            done
             exit 1
           fi
 

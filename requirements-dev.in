@@ -1,0 +1,22 @@
+# Development dependencies.
+# Runtime deps are NOT listed here: they live in requirements.in and are pulled in by
+# the -r below, which keeps this file a complete pip-compile input on its own.
+# See scripts/compile-deps.sh for why that matters.
+
+-r requirements.in
+
+# Build tools
+setuptools-scm>=10.0.5
+pip-tools>=7.6.1
+
+# Static analysis and code quality
+mypy>=2.3.1
+types-requests>=2.33.0.20260906
+types-PyYAML>=6.0.12.20260906
+ruff>=0.16.8
+black>=26.5.1
+
+# Testing
+pytest>=9.1.1
+pytest-cov>=7.1.0
+pytest-mock>=3.15.1
