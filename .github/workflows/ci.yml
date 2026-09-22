@@ -192,8 +192,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Tag as 'latest' for pushes to main
-            type=raw,value=latest,enable={{is_default_branch}}
+            # Tag as 'latest' for pushes to main.
+            # Not {{is_default_branch}}: the default branch is develop, so that would
+            # put 'latest' on the integration builds every user pulls by default.
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             # Tag as 'develop' for pushes to develop
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             # Tag as version for tags like v1.0.0
