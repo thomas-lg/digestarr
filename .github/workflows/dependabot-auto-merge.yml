@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       # For grouped updates this reports the highest bump in the group, so a major
       # hiding inside a group still falls through to manual review.
