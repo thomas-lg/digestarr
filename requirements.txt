@@ -6,7 +6,7 @@
 #
 annotated-types==0.7.0
     # via pydantic
-apscheduler==3.11.2
+apscheduler==3.11.3
     # via -r requirements.in
 certifi==2026.1.4
     # via requests
@@ -16,9 +16,9 @@ discord-webhook==1.4.1
     # via -r requirements.in
 idna==3.11
     # via requests
-pydantic==2.12.5
+pydantic==2.13.5
     # via -r requirements.in
-pydantic-core==2.41.5
+pydantic-core==2.46.5
     # via pydantic
 pyyaml==6.0.3
     # via -r requirements.in
