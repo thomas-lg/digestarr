@@ -40,7 +40,7 @@ feature/* ──► develop ──► release/* ──► main
 
 > **Repository setup required:** the nightly sync needs a `SYNC_TOKEN` repository secret (fine-grained PAT with "Contents: Read & Write" and "Pull requests: Read & Write" scopes) to push directly to the protected `develop` branch. See the prerequisites comment at the top of [`.github/workflows/sync-develop.yml`](.github/workflows/sync-develop.yml) for details.
 
-**Dependabot** PRs target `develop` and flow through the normal release process.
+**Renovate** PRs target `develop` and flow through the normal release process. Patch and minor updates merge on their own once the checks pass; majors wait for a review.
 
 ## Getting Started
 
@@ -161,7 +161,7 @@ Before submitting:
    ./scripts/test.sh
    ```
 
-4. If you changed the dependencies in `requirements.in` or `requirements-dev.in`, regenerate the lockfiles and commit them:
+4. If you changed the dependencies in `pyproject.toml`, regenerate the lockfiles and commit them:
 
    ```bash
    ./scripts/compile-deps.sh

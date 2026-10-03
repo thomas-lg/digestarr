@@ -12,7 +12,6 @@ on:
       - ".github/CODEOWNERS"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/conventional-commit-types.json"
-      - ".github/dependabot.yml"
   # No paths-ignore here on purpose. The ruleset on main and develop requires
   # build-and-push, tests and quality; a workflow skipped by path filtering never
   # reports those checks, so they stay pending forever and the PR can never merge.
@@ -83,8 +82,8 @@ jobs:
       - name: Check lockfiles are up to date
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -v "${{ github.workspace }}:/app" -w /app digestarr-devcontainer sh -c "
-            pip-compile requirements.in --output-file requirements.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache &&
-            pip-compile requirements-dev.in --output-file requirements-dev.txt --annotate --quiet --strip-extras --cache-dir /tmp/.cache
+            pip-compile pyproject.toml --output-file requirements.txt --quiet --strip-extras --cache-dir /tmp/.cache &&
+            pip-compile pyproject.toml --extra dev --output-file requirements-dev.txt --quiet --strip-extras --cache-dir /tmp/.cache
           "
           if ! git diff --exit-code requirements.txt requirements-dev.txt; then
             echo ""
