@@ -17,7 +17,7 @@
   <a href="https://mypy-lang.org/"><img src="https://www.mypy-lang.org/static/mypy_badge.svg" alt="Checked with mypy"/></a>
   <!-- Security & Maintenance -->
   <a href="https://github.com/thomas-lg/digestarr/security"><img src="https://img.shields.io/badge/security-trivy-1904DA?logo=aquasecurity&logoColor=white" alt="Security: Trivy"/></a>
-  <a href="https://github.com/thomas-lg/digestarr/network/updates"><img src="https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white" alt="Dependabot"/></a>
+  <a href="https://github.com/thomas-lg/digestarr/issues?q=is%3Aissue+is%3Aopen+%22Dependency+Dashboard%22"><img src="https://img.shields.io/badge/renovate-enabled-1A1F6C?logo=renovatebot&logoColor=white" alt="Renovate"/></a>
   <!-- License -->
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen?logo=opensourceinitiative&logoColor=white" alt="License: MIT"/></a>
 </p>
@@ -321,7 +321,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 │   └── test_tracearr_client.py # Tracearr client tests
 ├── scripts/ # Helper scripts
 │   ├── clean.sh # Clean up caches
-│   ├── compile-deps.sh # Regenerate lockfiles from requirements files
+│   ├── compile-deps.sh # Regenerate lockfiles from pyproject.toml
 │   ├── dev-container-shell.sh # Enter dev container shell
 │   ├── format.sh # Format Python code
 │   ├── healthcheck.py # Docker HEALTHCHECK probe
@@ -344,9 +344,7 @@ Script reference: [scripts/README.md](scripts/README.md)
 ├── docker-compose.yml # Production compose config
 ├── entrypoint.sh # Container entrypoint script
 ├── my-digestarr.xml # Unraid template
-├── pyproject.toml # Python project configuration
-├── requirements.in # Runtime dependencies (read by pyproject.toml, source of truth)
-├── requirements-dev.in # Development & testing dependencies
+├── pyproject.toml # Python project configuration and dependency constraints
 ├── requirements-dev.txt # Compiled lockfile for dev dependencies
 ├── requirements.txt # Compiled lockfile for runtime dependencies
 └── README.md

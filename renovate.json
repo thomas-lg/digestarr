@@ -1,0 +1,172 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Repository config. Only the managers listed here run: pip_requirements and pep621 are deliberately left out so pyproject.toml and the lockfiles are only ever changed through pip-compile (see thomas-lg/digestarr#174).",
+  "extends": [
+    "config:recommended"
+  ],
+  "baseBranches": [
+    "develop"
+  ],
+  "enabledManagers": [
+    "pip-compile",
+    "dockerfile",
+    "docker-compose",
+    "devcontainer",
+    "github-actions"
+  ],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^requirements\\.txt$/",
+      "/^requirements-dev\\.txt$/"
+    ]
+  },
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "timezone": "Europe/Paris",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 10,
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "semanticCommitType": "deps",
+  "semanticCommitScope": "",
+  "labels": [
+    "dependencies"
+  ],
+  "rangeStrategy": "bump",
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "automerge": true,
+    "commitMessageAction": "refresh",
+    "commitMessageTopic": "pip-compile lockfiles"
+  },
+  "packageRules": [
+    {
+      "description": "pyproject.toml is also where requires-python and the build backend live; neither is a lockfile dependency, so leave them to humans.",
+      "matchManagers": [
+        "pip-compile"
+      ],
+      "matchDepTypes": [
+        "requires-python",
+        "build-system.requires"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "click<8.5 is a deliberate ceiling (jazzband/pip-tools#2472); bumping the range would defeat it. Remove together with the pin.",
+      "matchManagers": [
+        "pip-compile"
+      ],
+      "matchPackageNames": [
+        "click"
+      ],
+      "enabled": false
+    },
+    {
+      "matchManagers": [
+        "pip-compile"
+      ],
+      "addLabels": [
+        "python"
+      ]
+    },
+    {
+      "description": "Recompile the locks with the toolchain pinned in requirements-dev.txt, exactly as the CI lockfile check does. Renovate's own pip-tools install pulls the latest click, which currently writes a spurious --no-index into the header (jazzband/pip-tools#2472).",
+      "matchManagers": [
+        "pip-compile"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "python -m pip install --quiet --requirement requirements-dev.txt",
+          "sh scripts/compile-deps.sh"
+        ],
+        "fileFilters": [
+          "requirements.txt",
+          "requirements-dev.txt"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "python -m pip install --quiet --requirement requirements-dev.txt",
+          "sh scripts/compile-deps.sh"
+        ],
+        "fileFilters": [
+          "requirements.txt",
+          "requirements-dev.txt"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "matchManagers": [
+        "dockerfile",
+        "docker-compose",
+        "devcontainer"
+      ],
+      "addLabels": [
+        "docker"
+      ]
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "addLabels": [
+        "github-actions"
+      ]
+    },
+    {
+      "description": "Patch and minor land on develop by themselves, majors wait for a human.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest"
+      ],
+      "automerge": true
+    },
+    {
+      "matchManagers": [
+        "pip-compile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "python-minor-patch"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "A new Python minor is a runtime upgrade, not a routine bump: review it by hand even though semver calls it minor.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "automerge": false
+    }
+  ]
+}

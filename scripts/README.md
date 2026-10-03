@@ -67,11 +67,9 @@ Run mypy.
 
 Recompile `requirements.txt` and `requirements-dev.txt`.
 
-Runtime constraints live in `requirements.in`, which `pyproject.toml` reads via
-`[tool.setuptools.dynamic]`; `requirements-dev.in` adds dev-only tooling on top and
-pulls `requirements.in` in with `-r`. Each lock is compiled from exactly one `.in`
-file — see the header of `compile-deps.sh` before changing that. Run this after
-modifying either input and commit the updated lockfiles.
+Dependency constraints live in `pyproject.toml`: `[project] dependencies` for the
+runtime lock, plus the `dev` extra for the dev lock. Run this after changing them and
+commit the updated lockfiles. Renovate runs the same script on its own PRs.
 
 ```bash
 ./scripts/compile-deps.sh

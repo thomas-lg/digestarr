@@ -42,7 +42,7 @@ feature/* ──► develop ──► release/* ──► main
 - New work targets `develop` via `feature/*` branches
 - `main` is the stable production branch (builds `latest` Docker image)
 - Hotfixes use `hotfix/<description>` branched from `main`
-- Dependabot PRs target `develop`
+- Renovate PRs target `develop`
 
 ## Code Style
 
@@ -62,11 +62,11 @@ feature/* ──► develop ──► release/* ──► main
 
 ## Dependency / Lockfile Management
 
-- Runtime deps: declared in `requirements.in` → compiled to `requirements.txt`
-- Dev deps: `requirements-dev.in` (dev tooling only, pulls `requirements.in` in with `-r`) → compiled to `requirements-dev.txt`
-- `requirements.in` is the single source of truth for runtime constraints — `pyproject.toml` reads it via `[tool.setuptools.dynamic]`, so never duplicate them there
-- Each lock has exactly one `.in` input, which is what lets Dependabot recompile it; see the header of `scripts/compile-deps.sh` before changing this layout
-- After changing `requirements.in` or `requirements-dev.in`, regenerate and commit the lockfiles:
+- Runtime deps: `[project] dependencies` in `pyproject.toml` → compiled to `requirements.txt`
+- Dev deps: the `dev` extra in `pyproject.toml` (dev tooling only; it inherits the runtime deps) → compiled to `requirements-dev.txt`
+- `pyproject.toml` is the single source of truth for constraints; the lockfiles are generated, never edited by hand
+- Renovate recompiles the lockfiles on its own PRs with `scripts/compile-deps.sh` (`renovate.json`)
+- After changing dependencies in `pyproject.toml`, regenerate and commit the lockfiles:
   ```bash
   ./scripts/compile-deps.sh
   ```
