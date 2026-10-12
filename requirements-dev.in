@@ -7,14 +7,14 @@
 
 # Build tools
 setuptools-scm>=10.0.5
-pip-tools>=7.6.1
+pip-tools>=7.6.2
 
 # Static analysis and code quality
 mypy>=2.4.0
 types-requests>=2.33.0.20261006
 types-PyYAML>=6.0.12.20260906
 ruff>=0.16.10
-black>=26.5.1
+black>=26.10.0
 
 # Testing
 pytest>=9.1.1
