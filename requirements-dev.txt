@@ -91,7 +91,7 @@ setuptools-scm==10.3.4
     # via -r requirements-dev.in
 types-pyyaml==6.0.12.20260906
     # via -r requirements-dev.in
-types-requests==2.33.0.20260906
+types-requests==2.33.0.20261006
     # via -r requirements-dev.in
 typing-extensions==4.15.0
     # via
