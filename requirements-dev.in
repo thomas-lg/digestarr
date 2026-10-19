@@ -13,8 +13,8 @@ pip-tools>=7.6.2
 mypy>=2.4.0
 types-requests>=2.33.0.20261006
 types-PyYAML>=6.0.12.20260906
-ruff>=0.16.10
-black>=26.10.0
+ruff>=0.17.1
+black>=26.10.1
 
 # Testing
 pytest>=9.1.1
