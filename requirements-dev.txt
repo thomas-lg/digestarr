@@ -75,7 +75,7 @@ pytest==9.1.1
     #   pytest-mock
 pytest-cov==7.1.0
     # via -r requirements-dev.in
-pytest-mock==3.16.0
+pytest-mock==3.17.0
     # via -r requirements-dev.in
 pytokens==0.4.1
     # via black
@@ -85,7 +85,7 @@ requests==2.34.2
     # via
     #   -r requirements.in
     #   discord-webhook
-ruff==0.17.1
+ruff==0.17.2
     # via -r requirements-dev.in
 setuptools-scm==10.3.4
     # via -r requirements-dev.in
